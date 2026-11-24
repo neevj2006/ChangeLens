@@ -17,6 +17,8 @@ const outcome: Record<Check['outcome'], string> = {
   baseline_ready: 'Baseline ready', changed: 'Price changed', unchanged: 'Unchanged',
   cosmetic: 'Formatting changed', needs_review: 'Needs review', failed: 'Check failed',
 }
+const outcomeLabel = (check: Check) => check.outcome === 'needs_review' && check.reviewExplanation
+  ? 'AI explanation' : outcome[check.outcome]
 const alerts: Record<Check['alert']['state'], string> = {
   not_applicable: 'No alert needed', pending: 'Sending', accepted: 'Accepted by email provider',
   failed: 'Delivery failed', unknown: 'Delivery unknown. Check your inbox.', disabled: 'Email unavailable',
@@ -97,7 +99,7 @@ function Workspace() {
               onClick={() => { setForm(false); void run(async () => show(await callAction('getWatch', { id: watch.id }))) }}>
               <span className="block">{watch.vendor} · {watch.plan}</span>
               <span className="block text-sm">{watch.seats} seats · {watch.status}</span>
-              {watch.latest && <span className="block text-sm">{outcome[watch.latest.outcome]} · {date(watch.latest.checkedAt)}</span>}
+              {watch.latest && <span className="block text-sm">{outcomeLabel(watch.latest)} · {date(watch.latest.checkedAt)}</span>}
             </button>
           </li>)}</ul>
         </aside>
@@ -147,7 +149,7 @@ function Workspace() {
               <ul className="space-y-2">{checks.map(check => <li key={check.id}>
                 <button className={button + ' w-full text-left'} disabled={busy} aria-pressed={report?.id === check.id}
                   onClick={() => void run(async () => setReport(await callAction('getCheck', { id: key.id, checkId: check.id })))}>
-                  {outcome[check.outcome]} · {date(check.checkedAt)}
+                  {outcomeLabel(check)} · {date(check.checkedAt)}
                 </button>
               </li>)}</ul>
               {cursor && <button className={button} disabled={busy} onClick={() => void run(async () => {
@@ -221,6 +223,7 @@ function EvidenceCard({ heading, evidence, watchId }: { heading: string; evidenc
   }
   return <section className={card}>
     <h3 className="font-semibold">{heading}</h3>
+    {evidence.interpretation === 'ai' && <p className="text-xs text-muted-foreground">AI interpretation. It may be wrong.</p>}
     <p>{evidence.plan} · {money(evidence.priceMinor, evidence.currency)} per seat per {evidence.cadence}</p>
     <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere] border-l-2 border-border pl-3">{evidence.excerpt}</blockquote>
     <p className="text-sm"><a className="cl-link" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing source<ExternalLink aria-hidden="true" /></a> · {date(evidence.capturedAt)}</p>
@@ -239,7 +242,12 @@ function EvidenceCard({ heading, evidence, watchId }: { heading: string; evidenc
 function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise<void>; busy: boolean }) {
   const { impact, context } = check
   return <section className={card + ' cl-report'} aria-label="Check report">
-    <h2 className="text-lg font-semibold">{outcome[check.outcome]}</h2><p>{check.message}</p>
+    <h2 className="text-lg font-semibold">{outcomeLabel(check)}</h2>
+    {(!check.reviewExplanation || check.outcome !== 'needs_review') && <p>{check.message}</p>}
+    {check.reviewExplanation && <div className="space-y-2 rounded-xl border border-input bg-background p-4">
+      <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{check.reviewExplanation.text}</p>
+      <p className="text-xs text-muted-foreground">AI-generated guidance. It may be wrong.</p>
+    </div>}
     {impact ? <>
       <div className="cl-impact space-y-2 p-4 sm:p-5"><p className="text-2xl font-semibold tracking-tight sm:text-4xl">{money(impact.oldTotalMinor, impact.old.currency)} → {money(impact.newTotalMinor, impact.current.currency)}</p>
       <p className="font-semibold">{impact.deltaMinor > 0 ? '+' : ''}{money(impact.deltaMinor, impact.current.currency)}/{impact.current.cadence} for {impact.seats} seats</p></div>

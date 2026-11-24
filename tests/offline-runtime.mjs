@@ -115,6 +115,15 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
         data = { markdown: '# Alder Desk\n\n## Pro\n\n' + (cosmetic ? '**' + price + '**' : price), metadata: { sourceURL: body.url, statusCode: 200 } }
       } else if (endpoint === 'chat-completion') {
         assert.equal(body.model, 'gpt-4.1-mini')
+        if (body.max_tokens === 220) {
+          const review = JSON.parse(body.messages[1].content)
+          const explanation = review.capturedText.includes('equivalent')
+            ? 'The page shows yearly billing. Verify a monthly offer before comparing.'
+            : 'NO_ANSWER'
+          return Response.json({ success: true, data: {
+            choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ explanation, price: null }) } }],
+          } })
+        }
         if (incompleteModel) return Response.json({ success: true, data: { choices: [] } })
         const source = JSON.parse(body.messages[1].content).source
         data = { choices: [{ finish_reason: 'stop', message: { content: String.fromCharCode(96).repeat(3) + 'json\n' + JSON.stringify({
@@ -205,11 +214,12 @@ try {
   annual = true
   watch = await ok('checkWatch', key())
   assert.equal(watch.latest.outcome, 'needs_review')
+  assert.match(watch.latest.reviewExplanation.text, /yearly billing/)
   assert.equal(watch.baseline.priceMinor, 2900)
   const { checks } = await ok('listChecks', key())
   assert.equal(checks.length, 6)
   assert.equal(calls.filter(call => call.endpoint === 'send').length, 1)
-  assert.equal(calls.filter(call => call.endpoint === 'chat-completion').length, 3)
+  assert.equal(calls.filter(call => call.endpoint === 'chat-completion' && call.body.max_tokens !== 220).length, 3)
 
   annual = false
   amount = 29
@@ -309,6 +319,7 @@ try {
   vendorWatch = await ok('checkWatch', v())
   assert.equal(vendorWatch.latest.outcome, 'needs_review')
   assert.match(vendorWatch.latest.message, /supported capture size/)
+  assert.equal(vendorWatch.latest.reviewExplanation, undefined)
   vendorOversized = false
   let alternative = await ok('createWatch', alternativeInput)
   alternative = await ok('captureBaseline', { id: alternative.id, revision: alternative.revision })

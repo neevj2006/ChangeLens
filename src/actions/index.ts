@@ -1,3 +1,4 @@
+import { explainReview, hasPackagingReview } from '../changelens/review'
 import { afterScheduledSlot, alertRuleInput, comparePackaging, contractGap, evaluateAlert, featureClaim, nextCheck, packagingFacts, reminderTiming, scheduleInput, seatMinimum, termsInput } from '../changelens/expansion'
 import { MAX_SEATS } from '../changelens/report'
 import { cleanContext, sendAlert, searchContext } from '../changelens/followups'
@@ -157,7 +158,13 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
     evidence: null, impact: null, alert: { state: 'not_applicable' }, context: { state: 'not_applicable' },
   }
   if (baseline) watch.candidate = null
+  let source = ''
+  let reviewAttempted = false
   const finish = async () => {
+    if (!reviewAttempted && (check.outcome === 'needs_review' || hasPackagingReview(check))) {
+      const region = planRegion(source, watch.plan)
+      check.reviewExplanation = (await explainReview(ctx.tools, watch, check, region ?? source))?.reviewExplanation
+    }
     if (check.evidence && watch.contract) check.contractGap = contractGap(watch.contract, check.evidence, watch.seats)
     if (watch.monitoring) {
       if (check.outcome === 'failed') watch.monitoring.consecutiveFailures++
@@ -184,7 +191,6 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
     return result
   }
 
-  let source: string
   let screenshotUrl: unknown
   let sourceUrl = watch.url
   try {
@@ -254,8 +260,17 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
       const json = /^\x60{3}(?:json)?\s*([\s\S]+?)\s*\x60{3}$/i.exec(content)?.[1] ?? content
       facts = verifyEvidence(source, JSON.parse(json), watch)
     }
+    let interpreted = false
+    if (!facts) {
+      reviewAttempted = true
+      const answer = await explainReview(ctx.tools, watch, check, planRegion(source, watch.plan) ?? source)
+      check.reviewExplanation = answer?.reviewExplanation
+      facts = answer?.quote ?? null
+      interpreted = !!facts
+    }
     if (facts) {
       const evidence: Evidence = { ...facts, snapshotId: check.id, sourceUrl, capturedAt: check.checkedAt }
+      if (interpreted) evidence.interpretation = 'ai'
       const region = planRegion(source, watch.plan)
       evidence.seatMinimum = seatMinimum(region, check.checkedAt)
       const factsForPackaging = packagingFacts(region, check.checkedAt)
@@ -635,9 +650,8 @@ export const actions: Record<string, ActionHandler<Env>> = {
       }
       const latest = watch.latest
       const skip = watch.monitoring?.lastSkip
-      const packagingReview = latest?.packaging?.state === 'needs_review' ||
-        latest?.packagingChanges?.some(item => item.state === 'needs_review')
-      const reason = skip?.reason ?? (packagingReview ? 'Packaging evidence needs review.' :
+      const packagingReview = latest && hasPackagingReview(latest)
+      const reason = skip?.reason ?? (latest?.reviewExplanation ? 'AI explanation available' : packagingReview ? 'Packaging evidence needs review.' :
         latest?.outcome === 'failed' || latest?.outcome === 'needs_review' ? latest.message : null)
       if (reason) result.attention.push({ watchId: watch.id, vendor: watch.vendor, checkId: latest?.id ?? null, at: skip?.at ?? latest?.checkedAt ?? null, reason })
     }

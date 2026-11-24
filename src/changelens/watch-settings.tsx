@@ -150,12 +150,12 @@ export function ReportFindings({ check }: { check: Check }) {
     {(packaging || !!packagingChanges?.length) && <section className={panel} aria-label="Packaging findings">
       <h3 className="font-semibold">Packaging findings</h3>
       {packaging && <div className="space-y-2">
-        <p>Seat minimum · {packaging.state === 'changed' ? 'Changed' : 'Needs review'}</p>
+        <p>Seat minimum · {packaging.state === 'changed' ? 'Changed' : check.reviewExplanation ? 'Unverified' : 'Needs review'}</p>
         {packaging.belowMinimum && <p>The current minimum exceeds your seat count.</p>}
         <PackagingCitations previous={packaging.previous} current={packaging.current} />
       </div>}
       {packagingChanges?.map((finding, index) => <div key={index} className="space-y-2">
-        <p>{finding.current?.label ?? finding.previous?.label} · {finding.state === 'changed' ? 'Changed' : 'Needs review'}</p>
+        <p>{finding.current?.label ?? finding.previous?.label} · {finding.state === 'changed' ? 'Changed' : check.reviewExplanation ? 'Unverified' : 'Needs review'}</p>
         <PackagingCitations previous={finding.previous} current={finding.current} />
       </div>)}
     </section>}

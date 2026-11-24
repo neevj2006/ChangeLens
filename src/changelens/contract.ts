@@ -45,6 +45,7 @@ export type Evidence = {
   unit: 'seat'
   priceMinor: number
   excerpt: string
+  interpretation?: 'ai'
   seatMinimum?: SeatMinimum | null
   packagingFacts?: PackagingFact[]
   screenshot?: 'available' | 'unavailable'
@@ -73,6 +74,7 @@ export type Check = {
   evidence: Evidence | null
   snapshot?: { id: string; markdown: string }
   impact: Impact | null
+  reviewExplanation?: { source: 'ai'; text: string }
   packaging?: Packaging
   packagingChanges?: PackagingChange[]
   alertDecision?: { eligible: boolean; reason: string; rule: AlertRule | null }

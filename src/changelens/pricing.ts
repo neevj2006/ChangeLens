@@ -115,6 +115,7 @@ export function calculateImpact(old: Evidence, current: Evidence, seats: number)
   return {
     old, current, seats, ...totals,
     assumptions: [
+      ...(old.interpretation === 'ai' || current.interpretation === 'ai' ? ['AI-interpreted pricing. Verify the source before relying on these amounts.'] : []),
       'Public listed per-seat price. Taxes and contract terms are excluded.',
       'Check your contract to see whether this change applies to you.',
     ],
