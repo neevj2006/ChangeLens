@@ -19,3 +19,5 @@ Render `needs_review` as **Needs review** and show the supplied reason. A stale 
 
 For the demo, use Alder Desk Pro, USD, monthly, 10 seats. The fixtures cover baseline confirmation, $290 → $390, +$100/month, saved history, unchanged and cosmetic checks, an annual offer and a scrape error.
 
+
+Confirmed email rejections can be retried through `retryAlert({ id, revision, checkId })`. The action requires the verified demo account and returns the updated watch revision. The saved report identifies the exact delivery. Accepted, pending, unknown and disabled deliveries are ineligible for retry.

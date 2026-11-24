@@ -66,6 +66,8 @@ export type ChangeLensActions = {
   confirmBaseline: [WatchVersion & { snapshotId: string }, Watch]
   checkWatch: [WatchVersion, Watch]
   listChecks: [{ id: string; before?: string }, { checks: Check[]; nextBefore: string | null }]
+  retryAlert: [WatchVersion & { checkId: string }, Watch]
   getCheck: [{ id: string; checkId: string }, Check]
 }
+
 

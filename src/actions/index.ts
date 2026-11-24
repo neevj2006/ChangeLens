@@ -9,7 +9,7 @@ import { calculateImpact, cosmeticForm, normalize, verifyEvidence, watchInput } 
 const collection = 'changeLensWatches'
 type Ctx = ActionContext<Env> & { verifiedEmail?: string; defer?: (task: () => Promise<unknown>) => void }
 type Snapshot = { id: string; source: string }
-type Saved = { watch: Watch; checks: Check[]; snapshots: Snapshot[]; comparable: Evidence | null }
+type Saved = { watch: Watch; checks: Check[]; snapshots: Snapshot[]; comparable: Evidence | null; alertAttempts?: Record<string, number>; alertVendors?: Record<string, string> }
 const success = <T>(data: T): Result<T> => ({ success: true, data })
 const failure = (code: string, error: string): Result<never> => ({ success: false, code, error })
 const notFound = () => failure('not_found', 'Watch or check not found.')
@@ -26,7 +26,7 @@ async function load(ctx: Ctx, id: string) {
   const staleBefore = Date.now() - 60_000
   for (const check of [...state.checks, state.watch.latest]) {
     if (!check || Date.parse(check.checkedAt) > staleBefore) continue
-    if (check.alert.state === 'pending') check.alert = { state: 'unknown' }
+    if (check.alert.state === 'pending' && (state.alertAttempts?.[check.id] ?? 0) <= staleBefore) check.alert = { state: 'unknown' }
     if (check.context.state === 'pending') check.context = { state: 'failed' }
   }
   return state
@@ -165,6 +165,8 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
         check.message = check.outcome === 'changed' ? 'The listed price changed.' : 'The listed price is unchanged.'
         if (check.outcome === 'changed') {
           check.impact = calculateImpact(previous, evidence, watch.seats)
+          state.alertVendors ??= {}
+          state.alertVendors[check.id] = watch.vendor
           check.alert = { state: ctx.env.CHANGELENS_ENABLE_EMAIL === 'true' && ctx.verifiedEmail && ctx.defer ? 'pending' : 'disabled' }
           check.context = { state: ctx.env.CHANGELENS_ENABLE_EXA === 'true' && ctx.defer ? 'pending' : 'not_applicable' }
         }
@@ -252,6 +254,31 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return save(ctx, state)
   }),
   checkWatch: mutate((ctx, state) => capture(ctx, state, false)),
+  retryAlert: mutate(async (ctx, state) => {
+    const input = z.uuid().safeParse(ctx.params.checkId)
+    if (!input.success) return invalid()
+    const check = state.checks.find(item => item.id === input.data)
+    if (!check?.impact) return notFound()
+    if (check.alert.state !== 'failed') return failure('retry_unavailable', 'Only a confirmed failure can be retried.')
+    const recipient = ctx.verifiedEmail
+    const impact = check.impact
+    if (ctx.env.CHANGELENS_ENABLE_EMAIL !== 'true' || !ctx.defer ||
+        ctx.userId !== ctx.env.OWNER_USER_ID || !recipient) {
+      return failure('retry_unavailable', 'Email retry requires the verified demo account and enabled delivery.')
+    }
+    check.alert = { state: 'pending' }
+    if (state.watch.latest?.id === check.id) state.watch.latest.alert = check.alert
+    state.alertAttempts ??= {}
+    state.alertAttempts[check.id] = Date.now()
+    const recorded = await save(ctx, state)
+    ctx.defer(async () => {
+      const watch = { ...state.watch, vendor: state.alertVendors?.[check.id] ?? state.watch.vendor, plan: impact.current.plan, cadence: impact.current.cadence }
+      check.alert = await sendAlert(ctx.tools, watch, impact, recipient)
+      if (state.watch.latest?.id === check.id) state.watch.latest.alert = check.alert
+      await save(ctx, state)
+    })
+    return recorded
+  }),
   async listChecks(ctx) {
     const input = idInput.extend({ before: z.uuid().optional() }).safeParse(ctx.params)
     if (!input.success) return invalid()
@@ -272,6 +299,8 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return success(snapshot ? { ...check, snapshot: { id: snapshot.id, markdown: snapshot.source } } : check)
   },
 }
+
+
 
 
 

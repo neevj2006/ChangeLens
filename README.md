@@ -38,7 +38,7 @@ Live deployment requires a ChangeLens registration and the intended app slug. Be
 
 ## Demo limits
 
-The current backend supports Markdown pricing cards with a standalone per-seat price and tables whose price columns explicitly identify currency, unit and billing period. Unsupported layouts and ambiguous cards require review. Watch history retains up to 30 checks per watch. A timed-out or interrupted email is surfaced as unknown and stays reserved. Confirmed-failure retries are still open.
+The current backend supports Markdown pricing cards with a standalone per-seat price and tables whose price columns explicitly identify currency, unit and billing period. Unsupported layouts and ambiguous cards require review. Watch history retains up to 30 checks per watch. A timed-out or interrupted email is surfaced as unknown and stays reserved. The verified demo account can explicitly retry a confirmed rejection through the retryAlert server action.
 
 
 
@@ -50,3 +50,19 @@ A screenshot can sit alongside each text citation with its captured timestamp an
 ### Firecrawl v2 connection
 
 CHANGELENS_FIRECRAWL_MODE=direct calls Firecrawl v2 from the authenticated Worker action. It uses Firecrawl keyless access by default and requests a fresh scrape. If keyless access is limited on the Worker network, the owner can configure FIRECRAWL_API_KEY as a DeepSpace secret. Gateway mode remains available by omitting CHANGELENS_FIRECRAWL_MODE. The direct path still uses Firecrawl, with DeepSpace handling hosting, authentication, records, and the other three integrations. [Firecrawl Keyless documentation](https://www.firecrawl.dev/blog/firecrawl-keyless-launch)
+
+## Submission walkthrough
+
+[Open ChangeLens](https://changelens.app.space/home) · [Controlled pricing page](https://changelens.app.space/demo-pricing)
+
+ChangeLens shows software buyers what a public subscription price change means at their seat count. It stores exact pricing evidence so a buyer can compare the offers and check their contract. The app uses DeepSpace Auth, Records and server actions, Firecrawl v2 for fresh snapshots, OpenAI for pricing facts, DeepSpace email for transaction alerts, and Exa for related public context.
+
+1. Sign in as the demo owner and set up Alder Desk Pro at 10 seats, USD, monthly on the controlled pricing page.
+2. With the page on baseline, capture and confirm $29 per seat. Advance the hosted pricing variant to increased.
+3. Check now. The report shows $290 to $390, +$100 per month, both dated excerpts and the source URL.
+4. Refresh the report to see email provider acceptance and Exa context. Verify inbox receipt independently.
+5. Repeat the check with the page still at $39. The result should be unchanged. The cosmetic, failed and annual variants can then be tested in that order.
+6. To stage a fresh walkthrough, restore the baseline variant and create a fresh watch before advancing the page again. Leave email disabled until another test send is authorized.
+
+The live walkthrough verified the cost change, both excerpts, saved history, one inbox receipt and an unchanged repeat without another send in the billing ledger. Exa search settled for that report. Separate live testing returned Atlassian pricing links. The cosmetic page was deployed and its formatting was verified in the raw Firecrawl Markdown.
+

@@ -19,6 +19,7 @@ let cosmetic = false
 let annual = false
 let scrapeFails = false
 let deliveryUnknown = false
+let deliveryRejected = false
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1',
   modules: true,
@@ -27,6 +28,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   compatibilityFlags: config.compatibility_flags,
   bindings: {
     ...config.vars,
+    CHANGELENS_DEMO_VARIANT: 'baseline',
     OWNER_USER_ID: owner, APP_OWNER_JWT: 'mock-billing',
     AUTH_JWT_PUBLIC_KEY: await exportSPKI(publicKey), AUTH_JWT_ISSUER: issuer,
     AUTH_WORKER_URL: issuer,
@@ -87,6 +89,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
           priceMinor: amount * 100, excerpt: source.slice(source.indexOf('## Pro')),
         }) + '\n' + String.fromCharCode(96).repeat(3) } }] }
       } else if (endpoint === 'send') {
+        if (deliveryRejected) return Response.json({ success: false, error: 'rejected' }, { status: 422 })
         if (deliveryUnknown) return Response.json({ success: false, error: 'ambiguous' }, { status: 502 })
         data = { id: 'fixture-delivery' }
       } else if (endpoint === 'search') {
@@ -185,6 +188,24 @@ try {
   assert.equal(decrease.alert.state, 'unknown')
   assert.equal(calls.filter(call => call.endpoint === 'send').length, 2)
   assert.equal(calls.filter(call => call.endpoint === 'send').at(-1).body.to, 'owner@example.test')
+  assert.equal((await post('retryAlert', { ...key(), checkId: decreaseId })).code, 'retry_unavailable')
+  deliveryUnknown = false
+  deliveryRejected = true
+  amount = 38
+  watch = await ok('checkWatch', key())
+  const rejectedId = watch.latest.id
+  // A serial action waits for the saved delivery result before using the revision.
+  assert.equal((await post('retryAlert', { ...key(), revision: 1, checkId: rejectedId })).code, 'stale_revision')
+  assert.equal((await ok('getCheck', { ...key(), checkId: rejectedId })).alert.state, 'failed')
+  deliveryRejected = false
+  const retry = await Promise.all([
+    post('retryAlert', { ...key(), checkId: rejectedId }), post('retryAlert', { ...key(), checkId: rejectedId }),
+  ])
+  assert.equal(retry.filter(result => result.success).length, 1)
+  watch = retry.find(result => result.success).data
+  assert.equal((await ok('getCheck', { ...key(), checkId: rejectedId })).alert.state, 'accepted')
+  assert.equal(calls.filter(call => call.endpoint === 'send').length, 4)
+  amount = 29
   const original = await ok('getCheck', { ...key(), checkId: changed.id })
   assert.equal(original.impact.seats, 10)
   watch = await ok('updateWatch', { ...input, ...key(), plan: 'Team' })
@@ -249,6 +270,8 @@ try {
 } finally {
   await runtime.dispose()
 }
+
+
 
 
 
