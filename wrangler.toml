@@ -28,7 +28,7 @@ run_worker_first = ["/demo-pricing", "/api/*", "/ws/*", "/internal/*", "/v1/*", 
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
 CHANGELENS_DEMO_VARIANT = "baseline"
-DEEPSPACE_APP_ID = "__APP_ID__"
+DEEPSPACE_APP_ID = "app_01M85H99WTT1MA6WV2782M9G6Y"
 APP_NAME = "changelens"
 # Exact comma-separated native callback URIs. Set this before deploying an
 # Expo client, for example: "myapp://auth/callback".
