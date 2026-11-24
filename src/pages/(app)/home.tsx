@@ -88,12 +88,12 @@ function Workspace() {
       </header>
       {busy && <p role="status">Working…</p>}
       {error && <p role="alert" className="rounded-md border border-destructive p-3">{error}</p>}
-      <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+      <div className={selected ? "grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]" : "grid gap-4"}>
         <aside className={card + ' self-start'}>
           <h2 className="flex items-center gap-2 text-lg font-semibold"><Activity size={17} aria-hidden="true" /> Watches <span className="ml-auto text-sm text-muted-foreground">{watches.length}</span></h2>
           {!watches.length && !busy && <p>No watches yet.</p>}
-          <ul className="space-y-2">{watches.map(watch => <li key={watch.id}>
-            <button className={button + ' cl-watch w-full text-left break-words'} disabled={busy} aria-pressed={selected?.id === watch.id}
+          <ul className={selected ? "grid gap-2" : "grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"}>{watches.map(watch => <li key={watch.id}>
+            <button className={button + ' cl-watch h-full w-full break-words text-left'} disabled={busy} aria-pressed={selected?.id === watch.id}
               onClick={() => { setForm(false); void run(async () => show(await callAction('getWatch', { id: watch.id }))) }}>
               <span className="block">{watch.vendor} · {watch.plan}</span>
               <span className="block text-sm">{watch.seats} seats · {watch.status}</span>
@@ -101,7 +101,7 @@ function Workspace() {
             </button>
           </li>)}</ul>
         </aside>
-        <div className="min-w-0 space-y-4">
+        {(form || selected) && <div className="min-w-0 space-y-4">
           {form && capabilities?.vendorCapture === false && <p className={card}>Live capture is currently available for the demo pricing page.</p>}
           {form && <WatchForm key={selected?.id ?? 'new'} watch={selected} busy={busy}
             close={() => setForm(false)} submit={input => run(async () => {
@@ -111,7 +111,10 @@ function Workspace() {
             })} />}
           {selected && key && <>
             <section className={card}>
-              <h2 className="break-words text-2xl font-semibold tracking-tight">{selected.vendor} · {selected.plan}</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="break-words text-2xl font-semibold tracking-tight">{selected.vendor} · {selected.plan}</h2>
+                <button type="button" className={button} onClick={() => { setSelected(null); setForm(false); setError('') }}>All watches</button>
+              </div>
               <p>{selected.currency} per {selected.cadence} · {selected.seats} seats · {selected.status}</p>
               <a className="cl-link inline-block" href={selected.url} target="_blank" rel="noreferrer">Open pricing page <ExternalLink aria-hidden="true" /></a>
               <div className="flex flex-wrap gap-2 pt-2">
@@ -154,7 +157,7 @@ function Workspace() {
               })}>Load older checks</button>}
             </section>
           </>}
-        </div>
+        </div>}
       </div>
       <PortfolioView busy={busy} run={run} open={(id, checkId) => void run(async () => {
         setForm(false)

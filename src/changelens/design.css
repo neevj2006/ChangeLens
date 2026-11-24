@@ -71,6 +71,8 @@
   color: #9BA8AB;
 }
 .cl-workspace details + details {
+  margin-top: .35rem;
+  padding-top: .35rem;
   border-top: 1px solid #253745;
 }
 .cl-watch[aria-pressed="true"] {

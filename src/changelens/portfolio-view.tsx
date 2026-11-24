@@ -99,7 +99,7 @@ export function ComparisonView({ watches, busy, run }: { watches: Watch[]; busy:
         <PeriodInput cadence={start.cadence} />
       </div>
       <label>Must-have features (one per line)<textarea className={control} name="features" maxLength={2019} rows={3} /></label>
-      <button className={action} disabled={busy || available.length < 2}>Compare selected watches</button>
+      <div className="pt-3"><button className={action} disabled={busy || available.length < 2}>Compare selected watches</button></div>
     </form>}
     {comparison && <div className="space-y-3">
       <h3 className="font-semibold">Listed prices at {comparison.seats} seats · {comparison.currency} per {comparison.cadence}</h3>
