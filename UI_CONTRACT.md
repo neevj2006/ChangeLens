@@ -41,3 +41,5 @@ These actions use the normal signed-in action route and owner-scoped watches.
 | getPortfolio | Takes optional windowDays, default 30 and maximum 365. Returns the latest transition per current watch, upcoming notice dates, attention items, currency-and-period groups, and exclusions. |
 
 Comparable checks can include contractGap, alertDecision, a dated seat-minimum finding, and packagingChanges for explicitly evidenced feature and allowance changes. Packaging findings do not turn an unchanged listed price into a price change. Scheduled work uses the latest confirmed scope. Missing evidence stays unknown. Monitoring rolls the visible history to 30 checks and retains evidence referenced by those reports or the current baseline.
+
+The signed-in getCapabilities action reports whether this deployment currently enables vendor capture, scheduled work, and email. Settings can be saved while one of those paths is paused.

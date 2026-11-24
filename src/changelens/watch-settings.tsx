@@ -1,6 +1,6 @@
 import type { FormEvent } from 'react'
 import { callAction } from './client'
-import type { Cadence, Check, Currency, Watch } from './contract'
+import type { Cadence, Capabilities, Check, Currency, Watch } from './contract'
 import { money } from './report'
 
 export const panel = 'min-w-0 space-y-3 rounded-xl border border-border bg-card p-4'
@@ -29,8 +29,8 @@ export function PeriodInput({ cadence }: { cadence: Cadence }) {
   </select></label>
 }
 
-export function WatchSettings({ watch, busy, save }: {
-  watch: Watch; busy: boolean; save: (request: () => Promise<Watch>) => void
+export function WatchSettings({ watch, busy, save, capabilities }: {
+  watch: Watch; busy: boolean; capabilities?: Capabilities; save: (request: () => Promise<Watch>) => void
 }) {
   const key = { id: watch.id, revision: watch.revision }
   const terms = watch.contract
@@ -41,6 +41,8 @@ export function WatchSettings({ watch, busy, save }: {
     <h2 className="text-lg font-semibold">Watch settings</h2>
     <details>
       <summary className="cursor-pointer font-medium">Contract and renewal</summary>
+      {capabilities && (!capabilities.scheduledChecks || !capabilities.email) &&
+        <p className="mt-3">Reminder emails are paused on this deployment.</p>}
       <form key={'contract-' + watch.revision} className="mt-3 space-y-3" onSubmit={event => {
         const values = formData(event)
         save(() => callAction('setContractTerms', { ...key, contract: {
@@ -73,6 +75,8 @@ export function WatchSettings({ watch, busy, save }: {
     </details>
     <details>
       <summary className="cursor-pointer font-medium">Scheduled checks</summary>
+      {capabilities && !capabilities.scheduledChecks &&
+        <p className="mt-3">Automatic checks are paused on this deployment. You can save a schedule for later.</p>}
       <form key={'schedule-' + watch.revision} className="mt-3 space-y-3" onSubmit={event => {
         const values = formData(event)
         save(() => callAction('setWatchSchedule', { ...key, schedule: {
@@ -92,7 +96,7 @@ export function WatchSettings({ watch, busy, save }: {
             onClick={() => save(() => callAction('setWatchSchedule', { ...key, schedule: null }))}>Clear schedule</button>}</div>
       </form>
       {watch.monitoring && <dl className="mt-3 grid gap-x-4 gap-y-1 sm:grid-cols-[auto_minmax(0,1fr)]">
-        <dt>Next scheduled time</dt><dd>{watch.monitoring.nextAt ? new Date(watch.monitoring.nextAt).toLocaleString() : 'None'}</dd>
+        <dt>{capabilities?.scheduledChecks === false ? 'Saved schedule time' : 'Next scheduled time'}</dt><dd>{watch.monitoring.nextAt ? new Date(watch.monitoring.nextAt).toLocaleString() : 'None'}</dd>
         <dt>Last successful capture</dt><dd>{watch.monitoring.lastSuccessAt ? new Date(watch.monitoring.lastSuccessAt).toLocaleString() : 'None yet'}</dd>
         <dt>Consecutive failures</dt><dd>{watch.monitoring.consecutiveFailures}</dd>
         {watch.monitoring.lastSkip && <><dt>Last skip</dt><dd>{watch.monitoring.lastSkip.reason}</dd></>}

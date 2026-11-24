@@ -4,7 +4,7 @@ import { formatSummary, MAX_SEATS, money, totalsAtSeats } from '../../changelens
 import { ComparisonView, PortfolioView } from '../../changelens/portfolio-view'
 import { ReportFindings, WatchSettings } from '../../changelens/watch-settings'
 import { callAction } from '../../changelens/client'
-import type { Check, Evidence, Impact, Watch, WatchInput } from '../../changelens/contract'
+import type { Capabilities, Check, Evidence, Impact, Watch, WatchInput } from '../../changelens/contract'
 
 const initial: WatchInput = { vendor: '', url: '', plan: '', seats: 10, currency: 'USD', cadence: 'month' }
 const button = 'rounded-md border border-border px-3 py-2 font-medium hover:bg-muted disabled:opacity-50'
@@ -34,6 +34,7 @@ export default function HomePage() {
 
 function Workspace() {
   const [watches, setWatches] = useState<Watch[]>([])
+  const [capabilities, setCapabilities] = useState<Capabilities>()
   const [selected, setSelected] = useState<Watch | null>(null)
   const [form, setForm] = useState(false)
   const [checks, setChecks] = useState<Check[]>([])
@@ -44,6 +45,9 @@ function Workspace() {
 
   useEffect(() => {
     let active = true
+    callAction('getCapabilities', {}).then(result => {
+      if (active) setCapabilities(result)
+    }).catch(() => undefined)
     callAction('listWatches', {}).then(rows => {
       if (active) setWatches(rows)
     }).catch((reason: unknown) => {
@@ -96,6 +100,7 @@ function Workspace() {
           </li>)}</ul>
         </aside>
         <div className="min-w-0 space-y-4">
+          {form && capabilities?.vendorCapture === false && <p className={card}>Live capture is currently available for the demo pricing page.</p>}
           {form && <WatchForm key={selected?.id ?? 'new'} watch={selected} busy={busy}
             close={() => setForm(false)} submit={input => run(async () => {
               const saved = key ? await callAction('updateWatch', { ...input, ...key }) : await callAction('createWatch', input)
@@ -121,7 +126,7 @@ function Workspace() {
                 })}>Remove</button>
               </div>
             </section>
-            <WatchSettings key={selected.id} watch={selected} busy={busy} save={request => void run(async () => show(await request()))} />
+            <WatchSettings key={selected.id} watch={selected} busy={busy} capabilities={capabilities} save={request => void run(async () => show(await request()))} />
             {selected.baseline && <EvidenceCard watchId={selected.id} heading="Confirmed baseline" evidence={selected.baseline} />}
             {selected.candidate && <section className={card}>
               <EvidenceCard watchId={selected.id} heading="Review baseline" evidence={selected.candidate} />

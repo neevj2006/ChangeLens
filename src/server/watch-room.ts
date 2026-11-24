@@ -117,7 +117,7 @@ export class WatchRoom {
     if (!action) return new Response(null, { status: 404 })
     const followups: (() => Promise<unknown>)[] = []
     const context = this.context(payload, followups)
-    const read = ['getWatch', 'getCheck', 'listChecks', 'listWatches', 'getScreenshot', 'getPortfolio', 'compareWatches'].includes(name)
+    const read = ['getWatch', 'getCheck', 'listChecks', 'listWatches', 'getScreenshot', 'getPortfolio', 'compareWatches', 'getCapabilities'].includes(name)
     try {
       if (read && this.env.CHANGELENS_ENABLE_SCHEDULES === 'true' && await this.state.storage.getAlarm() === null) {
         await this.armNext()

@@ -414,6 +414,16 @@ const comparisonInput = z.object({
   features: z.array(z.string().trim().min(1).max(100)).max(20),
 })
 export const actions: Record<string, ActionHandler<Env>> = {
+  async getCapabilities({ env }) {
+    const account = Number(env.CHANGELENS_ACCOUNT_DAILY_LIMIT)
+    const app = Number(env.CHANGELENS_APP_DAILY_LIMIT)
+    const budget = Number.isSafeInteger(account) && Number.isSafeInteger(app) && account >= 1 && account <= app && app <= 1_000
+    return success({
+      vendorCapture: budget && !!env.CHANGELENS_VENDOR_EGRESS_URL && !!env.CHANGELENS_EGRESS_TOKEN,
+      scheduledChecks: budget && env.CHANGELENS_ENABLE_SCHEDULES === 'true',
+      email: env.CHANGELENS_ENABLE_EMAIL === 'true',
+    })
+  },
   async createWatch(ctx) {
     const input = watchInput.safeParse(ctx.params)
     if (!input.success) return invalid()
