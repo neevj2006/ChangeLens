@@ -46,3 +46,7 @@ The current backend supports Markdown pricing cards with a standalone per-seat p
 
 A screenshot can sit alongside each text citation with its captured timestamp and original URL. Capturing both the baseline and later check is necessary to show how the page looked at each time. A later screenshot cannot reconstruct the old page. Store verified image bytes in owner-scoped storage if the provider returns a usable asset. Keep comparison and cost calculations grounded in the exact stored text. Screenshots are a possible follow-up. The current DeepSpace catalog accepts a format list, but ChangeLens has yet to verify screenshot support, asset lifetime, or billing through that integration. [Firecrawl scrape reference](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
 
+
+### Firecrawl v2 connection
+
+CHANGELENS_FIRECRAWL_MODE=direct calls Firecrawl v2 from the authenticated Worker action. It uses Firecrawl keyless access by default and requests a fresh scrape. If keyless access is limited on the Worker network, the owner can configure FIRECRAWL_API_KEY as a DeepSpace secret. Gateway mode remains available by omitting CHANGELENS_FIRECRAWL_MODE. The direct path still uses Firecrawl, with DeepSpace handling hosting, authentication, records, and the other three integrations. [Firecrawl Keyless documentation](https://www.firecrawl.dev/blog/firecrawl-keyless-launch)

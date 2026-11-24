@@ -13,6 +13,7 @@ const tokenFor = sub => new SignJWT({}).setProtectedHeader({ alg: 'ES256' })
 const owner = 'fixture-owner'
 const [ownerToken, otherToken] = await Promise.all([tokenFor(owner), tokenFor('fixture-other')])
 const calls = []
+const direct = process.env.CHANGELENS_TEST_FIRECRAWL === 'direct'
 let amount = 29
 let cosmetic = false
 let annual = false
@@ -30,9 +31,24 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     AUTH_JWT_PUBLIC_KEY: await exportSPKI(publicKey), AUTH_JWT_ISSUER: issuer,
     AUTH_WORKER_URL: issuer,
     CHANGELENS_PRICING_URL: pricingUrl, CHANGELENS_ENABLE_CAPTURE: 'true',
+    CHANGELENS_FIRECRAWL_MODE: direct ? 'direct' : 'gateway',
     CHANGELENS_ENABLE_EMAIL: 'true', CHANGELENS_ENABLE_EXA: 'true',
   },
   outboundService: async request => {
+    if (request.url === 'https://api.firecrawl.dev/v2/scrape') {
+      assert.equal(direct, true)
+      assert.equal(request.headers.get('authorization'), null)
+      const body = await request.json()
+      assert.equal(body.url, pricingUrl)
+      assert.equal(body.maxAge, 0)
+      assert.equal(body.storeInCache, false)
+      if (scrapeFails) return new Response(null, { status: 402 })
+      const price = annual ? 'USD $468 per seat per year (USD $39 per seat per month equivalent)' : 'USD $' + amount + ' per seat per month'
+      return Response.json({ success: true, data: {
+        markdown: '# Alder Desk\n\n## Pro\n\n' + (cosmetic ? '**' + price + '**' : price),
+        metadata: { url: pricingUrl, statusCode: 200 },
+      } })
+    }
     if (request.url.startsWith(pricingUrl + '?changelens_check=') && request.method === 'HEAD') return new Response(null)
     if (request.url === issuer + '/api/auth/get-session') {
       return Response.json({ user: { id: owner, email: 'owner@example.test', emailVerified: true } })
@@ -233,6 +249,8 @@ try {
 } finally {
   await runtime.dispose()
 }
+
+
 
 
 

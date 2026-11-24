@@ -125,6 +125,8 @@ export interface Env extends DOBindings<typeof __DO_MANIFEST__> {
   CHANGELENS_PRICING_URL?: string
   CHANGELENS_DEMO_VARIANT?: string
   CHANGELENS_ENABLE_CAPTURE?: string
+  CHANGELENS_FIRECRAWL_MODE?: string
+  FIRECRAWL_API_KEY?: string
   CHANGELENS_ENABLE_EMAIL?: string
   CHANGELENS_ENABLE_EXA?: string
 }
@@ -165,6 +167,7 @@ registerStaticRoutes(app)
 app.onError(workerErrorHandler('error'))
 
 export default app
+
 
 
 

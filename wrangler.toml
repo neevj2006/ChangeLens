@@ -28,6 +28,8 @@ run_worker_first = ["/demo-pricing", "/api/*", "/ws/*", "/internal/*", "/v1/*", 
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
 CHANGELENS_DEMO_VARIANT = "baseline"
+CHANGELENS_FIRECRAWL_MODE = "direct"
+CHANGELENS_ENABLE_CAPTURE = "true"
 CHANGELENS_PRICING_URL = "https://changelens.app.space/demo-pricing"
 DEEPSPACE_APP_ID = "app_01M85H99WTT1MA6WV2782M9G6Y"
 APP_NAME = "changelens"
@@ -81,6 +83,7 @@ bindings = [
 [dev]
 port = 8780
 inspector_port = 9237
+
 
 
 

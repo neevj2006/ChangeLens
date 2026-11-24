@@ -62,6 +62,19 @@ const chatResult = z.object({
   choices: z.tuple([z.object({ finish_reason: z.literal('stop'), message: z.object({ content: z.string().max(8_000) }) })]),
 })
 
+async function scrapeDirect(url: string, key?: string) {
+  const headers = new Headers({ 'Content-Type': 'application/json' })
+  if (key) headers.set('Authorization', 'Bearer ' + key)
+  const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
+    method: 'POST', headers, redirect: 'manual', signal: AbortSignal.timeout(15_000),
+    body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true, timeout: 10_000, maxAge: 0, storeInCache: false }),
+  })
+  if (!response.ok) {
+    console.warn('[changelens] Firecrawl v2 HTTP ' + response.status)
+    return { success: false as const }
+  }
+  return z.object({ success: z.literal(true), data: z.unknown() }).parse(await response.json())
+}
 async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
   const { watch } = state
   // The MVP sends only the operator-controlled demo URL to the paid scraper.
@@ -98,13 +111,17 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
       const preflight = await fetch(scrapeUrl, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(5_000) })
       if (!preflight.ok) return finish()
     }
-    const scraped = await ctx.tools.integration('firecrawl/scrape', {
-      url: scrapeUrl.href, formats: ['markdown'], onlyMainContent: true, timeout: 10_000,
-    })
-    const parsed = scrapeResult.safeParse(scraped.success ? scraped.data : null)
+    const direct = ctx.env.CHANGELENS_FIRECRAWL_MODE === 'direct'
+    const target = direct ? watch.url : scrapeUrl.href
+    const payload = direct
+      ? await scrapeDirect(target, ctx.env.FIRECRAWL_API_KEY)
+      : await ctx.tools.integration('firecrawl/scrape', {
+        url: target, formats: ['markdown'], onlyMainContent: true, timeout: 10_000,
+      })
+    const parsed = scrapeResult.safeParse(payload.success ? payload.data : null)
     if (!parsed.success) return finish()
     const { metadata, markdown } = parsed.data
-    if ((metadata.url ?? metadata.sourceURL) !== scrapeUrl.href ||
+    if ((metadata.url ?? metadata.sourceURL) !== target ||
       (metadata.statusCode !== undefined && metadata.statusCode !== 200) || !markdown.trim()) return finish()
     source = markdown
   } catch {
@@ -255,6 +272,9 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return success(snapshot ? { ...check, snapshot: { id: snapshot.id, markdown: snapshot.source } } : check)
   },
 }
+
+
+
 
 
 
