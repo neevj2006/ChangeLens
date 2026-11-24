@@ -27,7 +27,7 @@ run_worker_first = ["/demo-pricing", "/api/*", "/ws/*", "/internal/*", "/v1/*", 
 # subdomain label the next deploy claims; this id never changes — data,
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
-CHANGELENS_DEMO_VARIANT = "baseline"
+CHANGELENS_DEMO_VARIANT = "increased"
 CHANGELENS_FIRECRAWL_MODE = "direct"
 CHANGELENS_ENABLE_CAPTURE = "true"
 CHANGELENS_ENABLE_EMAIL = "true"
@@ -85,6 +85,7 @@ bindings = [
 [dev]
 port = 8780
 inspector_port = 9237
+
 
 
 
