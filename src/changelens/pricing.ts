@@ -1,3 +1,4 @@
+import { MAX_SEATS, totalsAtSeats } from './report'
 import { z } from 'zod'
 import type { Evidence, Impact, WatchInput } from './contract'
 
@@ -12,7 +13,7 @@ export const watchInput = z.object({
   plan: z.string().trim().min(1).max(100),
   currency: z.enum(['USD', 'EUR', 'GBP', 'CAD', 'AUD']),
   cadence: z.enum(['month', 'year']),
-  seats: z.number().int().min(1).max(100_000),
+  seats: z.number().int().min(1).max(MAX_SEATS),
 })
 
 export const normalize = (source: string) => source.replace(/\r\n?/g, '\n').trim()
@@ -85,16 +86,12 @@ export function verifyEvidence(source: string, proposed: unknown, watch: WatchIn
 }
 
 export function calculateImpact(old: Evidence, current: Evidence, seats: number): Impact {
-  const oldTotalMinor = old.priceMinor * seats
-  const newTotalMinor = current.priceMinor * seats
+  const totals = totalsAtSeats(old.priceMinor, current.priceMinor, seats)
   return {
-    old, current, seats, oldTotalMinor, newTotalMinor, deltaMinor: newTotalMinor - oldTotalMinor,
+    old, current, seats, ...totals,
     assumptions: [
       'Public listed per-seat price. Taxes and contract terms are excluded.',
       'Check your contract to see whether this change applies to you.',
     ],
   }
 }
-
-
-

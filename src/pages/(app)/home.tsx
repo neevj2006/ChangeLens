@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuthStatus } from 'deepspace'
+import { formatSummary, MAX_SEATS, money, totalsAtSeats } from '../../changelens/report'
 import { callAction } from '../../changelens/client'
-import type { Check, Evidence, Watch, WatchInput } from '../../changelens/contract'
+import type { Check, Evidence, Impact, Watch, WatchInput } from '../../changelens/contract'
 
 const initial: WatchInput = { vendor: '', url: '', plan: '', seats: 10, currency: 'USD', cadence: 'month' }
 const button = 'rounded-md border border-border px-3 py-2 font-medium hover:bg-muted disabled:opacity-50'
@@ -17,8 +18,6 @@ const alerts: Record<Check['alert']['state'], string> = {
   failed: 'Delivery failed', unknown: 'Delivery unknown. Check your inbox.', disabled: 'Email unavailable',
 }
 const date = (value: string) => new Date(value).toLocaleString()
-const money = (minor: number, currency: string) =>
-  new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(minor / 100)
 
 export default function HomePage() {
   const { isSignedIn, userId } = useAuthStatus()
@@ -120,14 +119,14 @@ function Workspace() {
                 })}>Remove</button>
               </div>
             </section>
-            {selected.baseline && <EvidenceCard heading="Confirmed baseline" evidence={selected.baseline} />}
+            {selected.baseline && <EvidenceCard watchId={selected.id} heading="Confirmed baseline" evidence={selected.baseline} />}
             {selected.candidate && <section className={card}>
-              <EvidenceCard heading="Review baseline" evidence={selected.candidate} />
+              <EvidenceCard watchId={selected.id} heading="Review baseline" evidence={selected.candidate} />
               <button className={primary} disabled={busy} onClick={() => void run(async () => show(await callAction('confirmBaseline', {
                 ...key, snapshotId: selected.candidate!.snapshotId,
               })))}>Confirm baseline and arm</button>
             </section>}
-            {report && <Report check={report} refresh={() => run(async () =>
+            {report && <Report key={report.id} check={report} refresh={() => run(async () =>
               setReport(await callAction('getCheck', { id: key.id, checkId: report.id })))} busy={busy} />}
             <section className={card}>
               <h2 className="text-lg font-semibold">Check history</h2>
@@ -170,7 +169,7 @@ function WatchForm({ watch, busy, close, submit }: {
       <label>Vendor<input className={field} name="vendor" defaultValue={values.vendor} maxLength={100} required /></label>
       <label>Pricing URL<input className={field} name="url" type="url" defaultValue={values.url} maxLength={500} required /></label>
       <label>Plan<input className={field} name="plan" defaultValue={values.plan} maxLength={100} required /></label>
-      <label>Seats<input className={field} name="seats" type="number" defaultValue={values.seats} min={1} max={100000} step={1} required /></label>
+      <label>Seats<input className={field} name="seats" type="number" defaultValue={values.seats} min={1} max={MAX_SEATS} step={1} required /></label>
       <label>Currency<select className={field} name="currency" defaultValue={values.currency}>
         {['USD', 'EUR', 'GBP', 'CAD', 'AUD'].map(currency => <option key={currency}>{currency}</option>)}
       </select></label>
@@ -183,12 +182,37 @@ function WatchForm({ watch, busy, close, submit }: {
   </form>
 }
 
-function EvidenceCard({ heading, evidence }: { heading: string; evidence: Evidence }) {
+function EvidenceCard({ heading, evidence, watchId }: { heading: string; evidence: Evidence; watchId: string }) {
+  const [image, setImage] = useState<{ id: string; src: string }>()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(false)
+  const currentImage = image?.id === evidence.snapshotId ? image : undefined
+  async function showScreenshot() {
+    setLoading(true)
+    setError(false)
+    try {
+      const data = await callAction('getScreenshot', { id: watchId, snapshotId: evidence.snapshotId })
+      setImage({ id: evidence.snapshotId, src: 'data:' + data.type + ';base64,' + data.base64 })
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }
   return <section className={card}>
     <h3 className="font-semibold">{heading}</h3>
     <p>{evidence.plan} · {money(evidence.priceMinor, evidence.currency)} per seat per {evidence.cadence}</p>
     <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere] border-l-2 border-border pl-3">{evidence.excerpt}</blockquote>
     <p className="text-sm"><a className="underline" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing source</a> · {date(evidence.capturedAt)}</p>
+    {evidence.screenshot === 'available' ? <>
+      <button className={button} disabled={loading} aria-expanded={!!currentImage}
+        onClick={() => currentImage ? setImage(undefined) : void showScreenshot()}>
+        {loading ? 'Loading screenshot…' : currentImage ? 'Hide screenshot' : 'Show screenshot'}
+      </button>
+      {error && <p role="alert">Screenshot could not be loaded.</p>}
+      {currentImage && <img className="h-auto max-w-full rounded-md" src={currentImage.src}
+        alt={'Pricing page captured for ' + evidence.plan + ' on ' + date(evidence.capturedAt)} />}
+    </> : <p className="text-sm text-muted-foreground">Screenshot unavailable for this capture.</p>}
   </section>
 }
 
@@ -200,10 +224,11 @@ function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise
       <p className="text-xl font-semibold">{money(impact.oldTotalMinor, impact.old.currency)} → {money(impact.newTotalMinor, impact.current.currency)}</p>
       <p className="font-semibold">{impact.deltaMinor > 0 ? '+' : ''}{money(impact.deltaMinor, impact.current.currency)}/{impact.current.cadence} for {impact.seats} seats</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        <EvidenceCard heading="Previous price" evidence={impact.old} />
-        <EvidenceCard heading="Current price" evidence={impact.current} />
+        <EvidenceCard watchId={check.watchId} heading="Previous price" evidence={impact.old} />
+        <EvidenceCard watchId={check.watchId} heading="Current price" evidence={impact.current} />
       </div>
       {impact.assumptions.map(text => <p key={text}>{text}</p>)}
+      <ImpactTools impact={impact} vendor={check.vendor} />
       <p>Email alert · {alerts[check.alert.state]}</p>
       {context.state === 'pending' && <p>Looking for context…</p>}
       {context.state === 'empty' && <p>No relevant context found</p>}
@@ -212,9 +237,49 @@ function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise
         <a className="break-words underline" href={source.url} target="_blank" rel="noreferrer">{source.title}</a>
         {source.publishedAt && ' · ' + date(source.publishedAt)}
       </li>)}</ul>}
-    </> : check.evidence && <EvidenceCard heading="Pricing evidence" evidence={check.evidence} />}
+    </> : check.evidence && <EvidenceCard watchId={check.watchId} heading="Pricing evidence" evidence={check.evidence} />}
     {check.snapshot && <details><summary>Captured page text</summary><pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{check.snapshot.markdown}</pre></details>}
     <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh report</button>
   </section>
 }
 
+
+
+function ImpactTools({ impact, vendor }: { impact: Impact; vendor?: string }) {
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'fallback'>('idle')
+  const [input, setInput] = useState(String(impact.seats))
+  const seats = Number(input)
+  const valid = /^\d+$/.test(input) && Number.isSafeInteger(seats) && seats >= 1 && seats <= MAX_SEATS
+  const totals = valid ? totalsAtSeats(impact.old.priceMinor, impact.current.priceMinor, seats) : null
+  const summary = formatSummary(impact, vendor)
+  const amount = (value: number) => money(value, impact.current.currency)
+
+  async function copySummary() {
+    try {
+      await navigator.clipboard.writeText(summary)
+      setCopy('copied')
+    } catch {
+      setCopy('fallback')
+    }
+  }
+
+  return <div className="space-y-3">
+    <button className={button} onClick={() => void copySummary()}>Copy summary</button>
+    {copy === 'copied' && <p role="status">Impact summary copied.</p>}
+    {copy === 'fallback' && <label className="block">
+      Copy the summary below
+      <textarea className={field} readOnly value={summary} rows={6} onFocus={event => event.target.select()} />
+    </label>}
+    <section className={card} aria-label="Seat-count calculator">
+      <h3 className="font-semibold">Seat-count calculator</h3>
+      <label>Hypothetical seats
+        <input className={field} type="number" inputMode="numeric" min={1} max={MAX_SEATS}
+          step={1} value={input} onChange={event => setInput(event.target.value)} aria-invalid={!valid} />
+      </label>
+      {totals ? <output className="block">
+        {amount(totals.oldTotalMinor)} → {amount(totals.newTotalMinor)}
+        {' · '}{totals.deltaMinor > 0 ? '+' : ''}{amount(totals.deltaMinor)}/{impact.current.cadence}
+      </output> : <p role="status">Enter a whole seat count from 1 to {MAX_SEATS.toLocaleString()}.</p>}
+    </section>
+  </div>
+}

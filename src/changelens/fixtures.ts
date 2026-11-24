@@ -66,6 +66,15 @@ export const uiFixtures = {
   candidate,
   confirmed: { ...candidate, revision: 3, status: 'armed', baseline: old, candidate: null } satisfies Watch,
   changed: { ...candidate, revision: 4, status: 'armed', baseline: old, candidate: null, latest: changed } satisfies Watch,
+  withScreenshots: {
+    ...changed,
+    vendor: 'Alder Desk',
+    impact: {
+      ...changed.impact!,
+      old: { ...old, screenshot: 'available' },
+      current: { ...current, screenshot: 'available' },
+    },
+  } satisfies Check,
   followups: {
     pending: { ...changed, alert: { state: 'pending' }, context: { state: 'pending' } },
     unknown: { ...changed, alert: { state: 'unknown' }, context: { state: 'failed' } },
@@ -89,4 +98,3 @@ export const uiFixtures = {
   },
   stale: { success: false, code: 'stale_revision', error: 'Reload the watch and try again.' } satisfies Result<never>,
 }
-

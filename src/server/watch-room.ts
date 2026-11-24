@@ -1,5 +1,6 @@
 import { lookupOwn } from 'deepspace/worker'
 import type { Env } from '../../worker'
+import type { ScreenshotImage } from '../changelens/contract'
 import { actions } from '../actions'
 import { createActionTools } from './action-routes'
 
@@ -17,6 +18,14 @@ export class WatchRoom {
     const tasks: (() => Promise<unknown>)[] = []
     const context = {
       userId, callerJwt, params, env: this.env, tools: createActionTools(this.env, userId, callerJwt),
+      screenshots: {
+        get: (key: string) => this.state.storage.get<ScreenshotImage>(key),
+        put: (key: string, image: ScreenshotImage) => this.state.storage.put(key, image),
+        remove: async (prefix: string) => {
+          const keys = [...(await this.state.storage.list({ prefix })).keys()]
+          if (keys.length) await this.state.storage.delete(keys)
+        },
+      },
       verifiedEmail, defer: (task: () => Promise<unknown>) => tasks.push(task),
     }
     // Reads can show the saved report while its independent follow-ups are running.
@@ -33,11 +42,9 @@ export class WatchRoom {
     }).catch(() => undefined)
     this.state.waitUntil(this.tail)
     try {
-      return Response.json(await run)
+      return Response.json(await run, { headers: { 'Cache-Control': 'no-store' } })
     } catch {
       return Response.json({ success: false, code: 'storage_error', error: 'ChangeLens could not complete the request.' })
     }
   }
 }
-
-

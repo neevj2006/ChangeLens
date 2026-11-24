@@ -1,13 +1,23 @@
 import { cleanContext, sendAlert, searchContext } from '../changelens/followups'
+import { downloadScreenshot } from '../changelens/screenshots'
 import { z } from 'zod'
 import { RECORD_NOT_FOUND } from 'deepspace/worker'
 import type { ActionContext, ActionHandler } from 'deepspace/worker'
 import type { Env } from '../../worker'
-import type { Check, Evidence, Result, Watch } from '../changelens/contract'
+import type { Check, Evidence, Result, ScreenshotImage, Watch } from '../changelens/contract'
 import { calculateImpact, cosmeticForm, normalize, verifyEvidence, watchInput } from '../changelens/pricing'
 
 const collection = 'changeLensWatches'
-type Ctx = ActionContext<Env> & { verifiedEmail?: string; defer?: (task: () => Promise<unknown>) => void }
+type Ctx = ActionContext<Env> & {
+  verifiedEmail?: string
+  defer?: (task: () => Promise<unknown>) => void
+  screenshots?: {
+    get: (key: string) => Promise<ScreenshotImage | undefined>
+    put: (key: string, image: ScreenshotImage) => Promise<void>
+    remove: (prefix: string) => Promise<void>
+  }
+}
+const screenshotPrefix = (id: string) => 'screenshot:' + id + ':'
 type Snapshot = { id: string; source: string }
 type Saved = { watch: Watch; checks: Check[]; snapshots: Snapshot[]; comparable: Evidence | null; alertAttempts?: Record<string, number>; alertVendors?: Record<string, string> }
 const success = <T>(data: T): Result<T> => ({ success: true, data })
@@ -58,20 +68,22 @@ function mutate(
 
 const scrapeResult = z.object({
   markdown: z.string().min(1).max(30_000),
+  screenshot: z.unknown().optional(),
   metadata: z.object({ sourceURL: z.string().optional(), url: z.string().optional(), statusCode: z.number().optional() }),
 })
 const chatResult = z.object({
   choices: z.tuple([z.object({ finish_reason: z.literal('stop'), message: z.object({ content: z.string().max(8_000) }) })]),
 })
 
-async function scrapeDirect(url: string, key?: string) {
+async function scrapeDirect(url: string, key?: string, screenshot = true) {
   const headers = new Headers({ 'Content-Type': 'application/json' })
   if (key) headers.set('Authorization', 'Bearer ' + key)
   const response = await fetch('https://api.firecrawl.dev/v2/scrape', {
     method: 'POST', headers, redirect: 'manual', signal: AbortSignal.timeout(15_000),
-    body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true, timeout: 10_000, maxAge: 0, storeInCache: false }),
+    body: JSON.stringify({ url, formats: screenshot ? ['markdown', { type: 'screenshot', fullPage: false, quality: 75 }] : ['markdown'], onlyMainContent: true, timeout: 10_000, maxAge: 0, storeInCache: false }),
   })
   if (!response.ok) {
+    if (screenshot && [400, 402, 422].includes(response.status)) return scrapeDirect(url, key, false)
     console.warn('[changelens] Firecrawl v2 HTTP ' + response.status)
     return { success: false as const }
   }
@@ -88,7 +100,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
     return failure('not_armed', 'Confirm the baseline and resume the watch before checking.')
   }
   const check: Check = {
-    id: crypto.randomUUID(), watchId: watch.id, checkedAt: new Date().toISOString(),
+    id: crypto.randomUUID(), watchId: watch.id, vendor: watch.vendor, checkedAt: new Date().toISOString(),
     outcome: 'failed', message: 'The pricing page could not be captured.',
     evidence: null, impact: null, alert: { state: 'not_applicable' }, context: { state: 'not_applicable' },
   }
@@ -102,6 +114,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
   if (state.checks.length >= 30) return failure('history_limit', 'This watch has reached its demo check limit.')
 
   let source: string
+  let screenshotUrl: unknown
   try {
     // The DeepSpace Firecrawl schema does not expose maxAge. Give each
     // controlled-page fetch a distinct URL while keeping the evidence link stable.
@@ -126,6 +139,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
     if ((metadata.url ?? metadata.sourceURL) !== target ||
       (metadata.statusCode !== undefined && metadata.statusCode !== 200) || !markdown.trim()) return finish()
     source = markdown
+    screenshotUrl = parsed.data.screenshot
   } catch {
     return finish()
   }
@@ -157,6 +171,18 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
     const facts = verifyEvidence(source, JSON.parse(json), watch)
     if (facts) {
       const evidence: Evidence = { ...facts, snapshotId: check.id, sourceUrl: watch.url, capturedAt: check.checkedAt }
+      evidence.screenshot = 'unavailable'
+      if (ctx.screenshots) {
+        const image = await downloadScreenshot(screenshotUrl)
+        if (image) {
+          try {
+            await ctx.screenshots.put(screenshotPrefix(watch.id) + check.id, image)
+            evidence.screenshot = 'available'
+          } catch {
+            // Keep verified text and the comparison usable if storage is unavailable.
+          }
+        }
+      }
       check.evidence = evidence
       if (baseline) {
         check.outcome = 'baseline_ready'
@@ -242,7 +268,9 @@ export const actions: Record<string, ActionHandler<Env>> = {
   }),
   removeWatch: mutate(async (ctx, state) => {
     const result = await ctx.tools.remove(collection, state.watch.id)
-    return result.success ? success(null) : failure('storage_error', 'The watch could not be removed.')
+    if (!result.success) return failure('storage_error', 'The watch could not be removed.')
+    await ctx.screenshots?.remove(screenshotPrefix(state.watch.id))
+    return success(null)
   }),
   captureBaseline: mutate((ctx, state) => capture(ctx, state, true)),
   confirmBaseline: mutate(async (ctx, state) => {
@@ -291,6 +319,15 @@ export const actions: Record<string, ActionHandler<Env>> = {
     const checks = state.checks.slice(offset, offset + 20)
     return success({ checks, nextBefore: state.checks.length > offset + checks.length ? checks.at(-1)?.id : null })
   },
+  async getScreenshot(ctx: Ctx) {
+    const input = idInput.extend({ snapshotId: z.uuid() }).safeParse(ctx.params)
+    if (!input.success) return invalid()
+    const { id, snapshotId } = input.data
+    const state = await load(ctx, id)
+    if (!state?.checks.some(check => check.id === snapshotId && check.evidence?.screenshot === 'available')) return notFound()
+    const image = await ctx.screenshots?.get(screenshotPrefix(id) + snapshotId)
+    return image ? success(image) : notFound()
+  },
   async getCheck(ctx) {
     const input = idInput.extend({ checkId: z.uuid() }).safeParse(ctx.params)
     if (!input.success) return invalid()
@@ -298,19 +335,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     const check = state?.checks.find(row => row.id === input.data.checkId)
     if (!check) return notFound()
     const snapshot = state?.snapshots.find(item => item.id === check.id)
-    return success(snapshot ? { ...check, snapshot: { id: snapshot.id, markdown: snapshot.source } } : check)
+    const report = { ...check, vendor: check.vendor ?? state?.alertVendors?.[check.id] }
+    return success(snapshot ? { ...report, snapshot: { id: snapshot.id, markdown: snapshot.source } } : report)
   },
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

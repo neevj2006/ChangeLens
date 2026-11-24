@@ -7,6 +7,9 @@ import { chromium } from '@playwright/test'
 
 const config = JSON.parse(await readFile('dist/changelens/wrangler.json', 'utf8'))
 const issuer = 'https://changelens-offline.test'
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jxZkAAAAASUVORK5CYII=', 'base64')
+const screenshotOrigin = 'https://storage.googleapis.com/changelens-fixture/'
+let screenshotMode = 'available'
 const pricingUrl = 'https://alderdesk.com/demo-pricing'
 const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true })
 const tokenFor = sub => new SignJWT({}).setProtectedHeader({ alg: 'ES256' })
@@ -39,6 +42,13 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     CHANGELENS_ENABLE_EMAIL: 'true', CHANGELENS_ENABLE_EXA: 'true',
   },
   outboundService: async request => {
+    if (request.url.startsWith(screenshotOrigin)) {
+      if (screenshotMode === 'invalid') return new Response('<html>', { headers: { 'content-type': 'text/html' } })
+      if (screenshotMode === 'oversized') return new Response(png, {
+        headers: { 'content-type': 'image/png', 'content-length': String(1024 * 1024 + 1) },
+      })
+      return new Response(png, { headers: { 'content-type': 'image/png' } })
+    }
     if (request.url === 'https://api.firecrawl.dev/v2/scrape') {
       assert.equal(direct, true)
       assert.equal(request.headers.get('authorization'), null)
@@ -51,6 +61,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
       return Response.json({ success: true, data: {
         markdown: '# Alder Desk\n\n## Pro\n\n' + (cosmetic ? '**' + price + '**' : price),
         metadata: { url: pricingUrl, statusCode: 200 },
+        screenshot: screenshotOrigin + amount + '.png',
       } })
     }
     if (request.url.startsWith(pricingUrl + '?changelens_check=') && request.method === 'HEAD') return new Response(null)
@@ -149,6 +160,14 @@ try {
     await new Promise(resolve => setTimeout(resolve, 30))
     changed = await ok('getCheck', { ...key(), checkId: watch.latest.id })
   }
+  if (direct) {
+    assert.equal(changed.impact.old.screenshot, 'available')
+    assert.equal(changed.impact.current.screenshot, 'available')
+    assert.notEqual(changed.impact.old.snapshotId, changed.impact.current.snapshotId)
+    const shot = { id: watch.id, snapshotId: changed.impact.current.snapshotId }
+    assert.deepEqual(await ok('getScreenshot', shot), { type: 'image/png', base64: png.toString('base64') })
+    assert.equal((await post('getScreenshot', shot, otherToken)).code, 'not_found')
+  }
   assert.equal(changed.alert.state, 'accepted')
   assert.equal(changed.context.state, 'empty')
   assert.match(calls.find(call => call.endpoint === 'send').body.text, /\+\$100\.00\/month/)
@@ -200,9 +219,11 @@ try {
   assert.match(watch.latest.message, /extraction did not complete/)
   assert.equal(calls.filter(call => call.endpoint === 'send').length, 2)
   incompleteModel = false
+  screenshotMode = 'invalid'
   deliveryRejected = true
   watch = await ok('checkWatch', key())
   const rejectedId = watch.latest.id
+  assert.equal(watch.latest.evidence.screenshot, 'unavailable')
   // A serial action waits for the saved delivery result before using the revision.
   assert.equal((await post('retryAlert', { ...key(), revision: 1, checkId: rejectedId })).code, 'stale_revision')
   assert.equal((await ok('getCheck', { ...key(), checkId: rejectedId })).alert.state, 'failed')
@@ -217,10 +238,17 @@ try {
   amount = 29
   const original = await ok('getCheck', { ...key(), checkId: changed.id })
   assert.equal(original.impact.seats, 10)
+  if (direct) {
+    screenshotMode = 'oversized'
+    watch = await ok('captureBaseline', key())
+    assert.equal(watch.candidate.screenshot, 'unavailable')
+  }
   watch = await ok('updateWatch', { ...input, ...key(), plan: 'Team' })
   assert.equal(watch.baseline, null)
   assert.equal(watch.status, 'unarmed')
   await ok('removeWatch', key())
+  assert.equal((await post('getScreenshot', { id: watch.id, snapshotId: changed.impact.current.snapshotId })).code, 'not_found')
+  screenshotMode = 'available'
   assert.deepEqual(await ok('listWatches'), [])
 
   const demo = await runtime.dispatchFetch('http://localhost/demo-pricing')
@@ -277,6 +305,29 @@ try {
       await page.getByRole('button', { name: 'Refresh report' }).click()
       await report.getByText('No relevant context found').waitFor()
       await report.getByText('Accepted by email provider', { exact: false }).waitFor()
+      if (direct) {
+        await report.getByRole('button', { name: 'Show screenshot', exact: true }).first().click()
+        await report.getByRole('img', { name: /Pricing page captured for Pro/ }).waitFor()
+      }
+      const callsBeforeCalculator = calls.length
+      await report.getByLabel('Hypothetical seats').fill('25')
+      await report.getByText(/\$725\.00 → \$975\.00.*\+\$250\.00\/month/).waitFor()
+      await report.getByLabel('Hypothetical seats').fill('0')
+      await report.getByText(/Enter a whole seat count/).waitFor()
+      assert.equal(calls.length, callsBeforeCalculator)
+      await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: text => { window.fixtureClipboard = text; return Promise.resolve() },
+      } }))
+      await report.getByRole('button', { name: 'Copy summary', exact: true }).click()
+      await report.getByText('Impact summary copied.').waitFor()
+      assert.match(await page.evaluate(() => window.fixtureClipboard), /10 seats/)
+      await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: () => Promise.reject(new Error('fixture clipboard unavailable')),
+      } }))
+      await report.getByRole('button', { name: 'Copy summary', exact: true }).click()
+      const summary = await report.getByLabel('Copy the summary below').inputValue()
+      assert.match(summary, /\$290\.00 → \$390\.00 \(\+\$100\.00\/month\)/)
+      assert.match(summary, /10 seats/)
       await page.reload()
       await page.getByRole('button', { name: /Alder Desk · Pro.*Price changed/ }).click()
       await page.getByText('+$100.00/month for 10 seats', { exact: true }).waitFor()
@@ -288,6 +339,14 @@ try {
         await route.fulfill({ response, json: body })
       })
       await page.getByRole('button', { name: 'Refresh report' }).click()
+      if (direct) {
+        const buttons = report.getByRole('button', { name: 'Show screenshot', exact: true })
+        const images = report.getByRole('img', { name: /Pricing page captured for Pro/ })
+        await buttons.first().click()
+        await images.first().waitFor()
+        await buttons.first().click()
+        await images.nth(1).waitFor()
+      }
       await page.getByText('Captured page text').click()
       await page.setViewportSize({ width: 390, height: 844 })
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
@@ -302,15 +361,3 @@ try {
 } finally {
   await runtime.dispose()
 }
-
-
-
-
-
-
-
-
-
-
-
-

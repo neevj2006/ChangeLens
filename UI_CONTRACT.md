@@ -21,3 +21,9 @@ For the demo, use Alder Desk Pro, USD, monthly, 10 seats. The fixtures cover bas
 
 
 Confirmed email rejections can be retried through `retryAlert({ id, revision, checkId })`. The action requires the verified demo account and returns the updated watch revision. The saved report identifies the exact delivery. Accepted, pending, unknown and disabled deliveries are ineligible for retry.
+
+## Report tools
+
+Evidence may include screenshot status. Existing reports may omit the field. For available images call `getScreenshot({ id, snapshotId })` with the watch ID and evidence snapshot ID. The authenticated action returns a raster MIME type and base64 bytes. Render privately in the report and keep provider URLs out of the client. Screenshot capture is best effort on the direct Firecrawl v2 path and is available only for new verified evidence.
+
+A changed check may include its captured vendor name. The copy summary uses the saved report and original seat count. For historical records without a captured vendor, use the source hostname. The calculator uses the same integer minor-unit arithmetic and keeps hypothetical amounts local to the page.

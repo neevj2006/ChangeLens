@@ -8,6 +8,7 @@ export type WatchInput = {
   cadence: Cadence
   seats: number
 }
+export type ScreenshotImage = { type: 'image/png' | 'image/jpeg'; base64: string }
 export type Evidence = {
   snapshotId: string
   sourceUrl: string
@@ -18,6 +19,7 @@ export type Evidence = {
   unit: 'seat'
   priceMinor: number
   excerpt: string
+  screenshot?: 'available' | 'unavailable'
 }
 export type Outcome = 'baseline_ready' | 'unchanged' | 'cosmetic' | 'changed' | 'needs_review' | 'failed'
 export type Alert = { state: 'not_applicable' | 'pending' | 'accepted' | 'failed' | 'unknown' | 'disabled' }
@@ -36,6 +38,7 @@ export type Impact = {
 export type Check = {
   id: string
   watchId: string
+  vendor?: string
   checkedAt: string
   outcome: Outcome
   message: string
@@ -67,7 +70,6 @@ export type ChangeLensActions = {
   checkWatch: [WatchVersion, Watch]
   listChecks: [{ id: string; before?: string }, { checks: Check[]; nextBefore: string | null }]
   retryAlert: [WatchVersion & { checkId: string }, Watch]
+  getScreenshot: [{ id: string; snapshotId: string }, ScreenshotImage]
   getCheck: [{ id: string; checkId: string }, Check]
 }
-
-
