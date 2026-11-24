@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuthStatus } from 'deepspace'
 import { formatSummary, MAX_SEATS, money, totalsAtSeats } from '../../changelens/report'
+import { ComparisonView, PortfolioView } from '../../changelens/portfolio-view'
+import { ReportFindings, WatchSettings } from '../../changelens/watch-settings'
 import { callAction } from '../../changelens/client'
 import type { Check, Evidence, Impact, Watch, WatchInput } from '../../changelens/contract'
 
@@ -119,6 +121,7 @@ function Workspace() {
                 })}>Remove</button>
               </div>
             </section>
+            <WatchSettings key={selected.id} watch={selected} busy={busy} save={request => void run(async () => show(await request()))} />
             {selected.baseline && <EvidenceCard watchId={selected.id} heading="Confirmed baseline" evidence={selected.baseline} />}
             {selected.candidate && <section className={card}>
               <EvidenceCard watchId={selected.id} heading="Review baseline" evidence={selected.candidate} />
@@ -146,6 +149,13 @@ function Workspace() {
           </>}
         </div>
       </div>
+      <PortfolioView busy={busy} run={run} open={(id, checkId) => void run(async () => {
+        setForm(false)
+        await show(await callAction('getWatch', { id }))
+        if (checkId) setReport(await callAction('getCheck', { id, checkId }))
+        document.querySelector('h1')?.scrollIntoView({ block: 'start' })
+      })} />
+      <ComparisonView watches={watches} busy={busy} run={run} />
     </section>
   )
 }
@@ -238,6 +248,7 @@ function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise
         {source.publishedAt && ' · ' + date(source.publishedAt)}
       </li>)}</ul>}
     </> : check.evidence && <EvidenceCard watchId={check.watchId} heading="Pricing evidence" evidence={check.evidence} />}
+    <ReportFindings check={check} />
     {check.snapshot && <details><summary>Captured page text</summary><pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{check.snapshot.markdown}</pre></details>}
     <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh report</button>
   </section>

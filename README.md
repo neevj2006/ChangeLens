@@ -38,7 +38,7 @@ Live deployment requires a ChangeLens registration and the intended app slug. Be
 
 ## Demo limits
 
-The current backend supports Markdown pricing cards with a standalone per-seat price and tables whose price columns explicitly identify currency, unit and billing period. Unsupported layouts and ambiguous cards require review. Watch history retains up to 30 checks per watch. A timed-out or interrupted email is surfaced as unknown and stays reserved. The verified demo account can explicitly retry a confirmed rejection through the retryAlert server action.
+The current backend supports Markdown pricing cards with a standalone per-seat price and tables whose price columns explicitly identify currency, unit and billing period. Unsupported layouts and ambiguous cards require review. Watch history keeps the most recent 30 checks plus evidence referenced by the baseline and retained reports. A timed-out or interrupted email is surfaced as unknown and stays reserved. The verified demo account can explicitly retry a confirmed rejection through the retryAlert server action.
 
 
 
@@ -65,5 +65,16 @@ ChangeLens shows software buyers what a public subscription price change means a
 6. To stage a fresh walkthrough, restore the baseline variant and create a fresh watch before advancing the page again. Leave email disabled until another test send is authorized.
 
 The live walkthrough verified the cost change, both excerpts, saved history, one inbox receipt and an unchanged repeat without another send in the billing ledger. Exa search settled for that report. Separate live testing returned Atlassian pricing links. The owner verified formatting-only, failed-scrape, and annual-billing checks with no additional email. The public page was reset to the $29 baseline with email disabled after the walkthrough.
+
+
+
+## Expanded backend and joint live setup
+
+The expanded backend and initial signed-in UI are implemented locally. Watch settings expose contracts, reminders, schedules and alert rules. The dashboard adds portfolio and comparison views. Reports show saved alert decisions, contract gaps, and packaging evidence. The existing controlled demo still uses Firecrawl. For real vendor pages, deploy services/pricing-egress.mjs as a separate Node process behind TLS. It binds loopback by default and accepts POST /capture with a shared secret. Its parser supports server-rendered HTML and text. Pages requiring JavaScript, region selection, or ambiguous pricing layouts may require review. This path does not supply Firecrawl screenshots.
+
+- Configure the same strong CHANGELENS_EGRESS_TOKEN in the service environment and as a DeepSpace secret. Configure CHANGELENS_VENDOR_EGRESS_URL to the trusted HTTPS service origin. The service validates DNS and pins the connection on every redirect.
+- Configure CHANGELENS_ACCOUNT_DAILY_LIMIT and CHANGELENS_APP_DAILY_LIMIT before enabling vendor captures or scheduling. These are UTC-day reservations, not dollar balances. One reservation covers one bounded capture and its optional model, context, and email follow-ups, or one reminder or retry. The limits default to disabled.
+- Enable CHANGELENS_ENABLE_SCHEDULES only after agreeing the test limits. A watch Durable Object alarms for due slots and renewal reminders. Watch checks serialize against manual actions. A slot is advanced before provider work, so interruption can leave a saved pending skip but cannot replay the slot. Reminder sends use the verified account address captured when the buyer enabled the reminder. Paid email remains disabled in current production settings.
+- Test the egress service separately with node --test services/pricing-egress.test.mjs. The offline Worker suite exercises the action flow, the budget, and a real Durable Object alarm against a mock email provider.
 
 

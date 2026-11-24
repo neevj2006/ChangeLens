@@ -8,8 +8,8 @@ export const watchInput = z.object({
     const url = new URL(value)
     return !url.username && !url.password && !url.port && !url.hash &&
       /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/i.test(url.hostname) &&
-      !/\.(?:local|internal|localhost|test|invalid|example)$/i.test(url.hostname)
-  }),
+      !/\.(?:local|internal|localhost|test|invalid|example|onion|home|arpa)$/i.test(url.hostname)
+  }).transform(value => new URL(value).href),
   plan: z.string().trim().min(1).max(100),
   currency: z.enum(['USD', 'EUR', 'GBP', 'CAD', 'AUD']),
   cadence: z.enum(['month', 'year']),
@@ -30,7 +30,7 @@ export const extractedPrice = z.object({
   excerpt: z.string().min(1).max(1_000),
 })
 
-const priceLine = /^(USD|EUR|GBP|CAD|AUD) ([$€£])(\d{1,7})(?:\.(\d{2}))? per seat per (month|year)$/i
+const priceLine = /^(USD|EUR|GBP|CAD|AUD)\s*([$€£])?\s*(\d{1,7})(?:\.(\d{1,2}))?\s*(?:per|\/)\s*(?:seat|user)\s*(?:per|\/)\s*(month|year)$/i
 const symbols = { USD: '$', EUR: '€', GBP: '£', CAD: '$', AUD: '$' }
 
 const tableCells = (line: string) => line.trim().slice(1, -1).split('|').map(cell => cell.trim())
@@ -57,18 +57,25 @@ function matchesTable(source: string, facts: z.infer<typeof extractedPrice>): bo
     source.indexOf(evidence) === source.lastIndexOf(evidence) && amount[1] === symbols[facts.currency] &&
     Number(amount[2]) * 100 + Number(amount[3] ?? 0) === facts.priceMinor)
 }
+export function planRegion(source: string, plan: string) {
+  const regions = source.split(/(?=^#{1,6} )/m).filter(region => {
+    const title = /^#{1,6} (.+)$/.exec(region.split(/\r?\n/, 1)[0].trim())?.[1]
+    return title?.toLowerCase() === plan.toLowerCase()
+  })
+  return regions.length === 1 ? regions[0] : null
+}
 export function verifyEvidence(source: string, proposed: unknown, watch: WatchInput) {
   const parsed = extractedPrice.safeParse(proposed)
   if (!parsed.success) return null
   const facts = parsed.data
   if (facts.plan !== watch.plan || facts.currency !== watch.currency || facts.cadence !== watch.cadence) return null
-  // The supported card is a level-two plan heading followed by a standalone exact price line.
-  // Reject additional price-like lines and annual terms in that card.
-  const regions = source.split(/(?=^#{1,2} )/m).filter(region =>
-    region.split(/\r?\n/, 1)[0].trim().toLowerCase() === ('## ' + watch.plan).toLowerCase())
-  if (regions.length === 0) return matchesTable(source, facts) ? facts : null
-  if (regions.length !== 1) return null
-  const region = regions[0]
+  const region = planRegion(source, watch.plan)
+  if (!region) {
+    // A duplicated plan heading makes the offer ambiguous, even when a table is present.
+    const matchingHeadings = source.split(/\r?\n/).filter(line =>
+      /^#{1,6} (.+)$/.exec(line.trim())?.[1]?.toLowerCase() === watch.plan.toLowerCase())
+    return !matchingHeadings.length && matchesTable(source, facts) ? facts : null
+  }
   const start = source.indexOf(region)
   const excerptAt = source.indexOf(facts.excerpt)
   if (excerptAt !== start || !region.startsWith(facts.excerpt) || source.lastIndexOf(facts.excerpt) !== excerptAt) return null
@@ -80,8 +87,8 @@ export function verifyEvidence(source: string, proposed: unknown, watch: WatchIn
   if (!price || !facts.excerpt.split(/\r?\n/).some(line =>
     line.trim().replace(/^\*\*(.*)\*\*$/, '$1') === pricingLine)) return null
   const [, currency, symbol, whole, fraction, cadence] = price
-  return currency.toUpperCase() === facts.currency && symbol === symbols[facts.currency] &&
-    cadence.toLowerCase() === facts.cadence && Number(whole) * 100 + Number(fraction ?? 0) === facts.priceMinor
+  return currency.toUpperCase() === facts.currency && (!symbol || symbol === symbols[facts.currency]) &&
+    cadence.toLowerCase() === facts.cadence && Number(whole) * 100 + Number((fraction ?? '').padEnd(2, '0')) === facts.priceMinor
     ? facts : null
 }
 

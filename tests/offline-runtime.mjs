@@ -25,6 +25,9 @@ let scrapeFails = false
 let deliveryUnknown = false
 let deliveryRejected = false
 let incompleteModel = false
+let vendorMinimum = 5
+let vendorUnsupported = false
+let vendorOversized = false
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1',
   modules: true,
@@ -39,9 +42,23 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     AUTH_WORKER_URL: issuer,
     CHANGELENS_PRICING_URL: pricingUrl, CHANGELENS_ENABLE_CAPTURE: 'true',
     CHANGELENS_FIRECRAWL_MODE: direct ? 'direct' : 'gateway',
+    CHANGELENS_VENDOR_EGRESS_URL: 'https://egress.example.org',
+    CHANGELENS_EGRESS_TOKEN: 'offline-egress',
+    CHANGELENS_ENABLE_SCHEDULES: 'true',
+    CHANGELENS_ACCOUNT_DAILY_LIMIT: '7',
+    CHANGELENS_APP_DAILY_LIMIT: '8',
     CHANGELENS_ENABLE_EMAIL: 'true', CHANGELENS_ENABLE_EXA: 'true',
   },
   outboundService: async request => {
+    if (request.url === 'https://egress.example.org/capture') {
+      assert.equal(request.headers.get('authorization'), 'Bearer offline-egress')
+      const { url } = await request.json()
+      if (vendorOversized) return Response.json({ code: 'unsupported_page' }, { status: 415 })
+      assert.match(url, /^https:\/\/[a-z]+\.example\.org\/pricing$/)
+      const price = vendorUnsupported ? 'Contact sales' : 'USD $' + amount + ' per seat per month'
+      return Response.json({ url, markdown: '# Vendor\n\n## Pro\n\n' + price +
+        '\n\n- Minimum ' + vendorMinimum + ' seats\n- Includes SSO' })
+    }
     if (request.url.startsWith(screenshotOrigin)) {
       if (screenshotMode === 'invalid') return new Response('<html>', { headers: { 'content-type': 'text/html' } })
       if (screenshotMode === 'oversized') return new Response(png, {
@@ -251,6 +268,87 @@ try {
   screenshotMode = 'available'
   assert.deepEqual(await ok('listWatches'), [])
 
+  const vendorInput = { ...input, url: 'https://vendor.example.org/pricing' }
+  const alternativeInput = { ...input, vendor: 'Another vendor', url: 'https://another.example.org/pricing' }
+  let vendorWatch = await ok('createWatch', vendorInput)
+  const v = () => ({ id: vendorWatch.id, revision: vendorWatch.revision })
+  vendorWatch = await ok('captureBaseline', v())
+  assert.equal(vendorWatch.candidate.seatMinimum.seats, 5)
+  vendorWatch = await ok('confirmBaseline', { ...v(), snapshotId: vendorWatch.candidate.snapshotId })
+  vendorWatch = await ok('setContractTerms', { ...v(), contract: {
+    priceMinor: 2500, currency: 'USD', cadence: 'month', renewalDate: '2026-12-23',
+    noticeDate: '2026-12-01', timezone: 'America/New_York', leadDays: null,
+  } })
+  assert.equal(vendorWatch.contractGap.deltaMinor, 4000)
+  vendorWatch = await ok('setWatchSchedule', { ...v(), schedule: {
+    timezone: 'America/New_York', hour: 9, frequency: 'weekly',
+  } })
+  assert.ok(Date.parse(vendorWatch.monitoring.nextAt) > Date.now())
+  vendorWatch = await ok('setAlertRule', { ...v(), rule: {
+    increases: true, decreases: false, minAmountMinor: 15000, minBasisPoints: null,
+  } })
+  vendorMinimum = 12
+  vendorWatch = await ok('checkWatch', v())
+  assert.equal(vendorWatch.latest.outcome, 'unchanged')
+  assert.equal(vendorWatch.latest.packaging.current.seats, 12)
+  assert.equal(vendorWatch.latest.packaging.belowMinimum, true)
+  amount = 39
+  vendorWatch = await ok('checkWatch', v())
+  assert.equal(vendorWatch.latest.impact.deltaMinor, 10000)
+  assert.equal(vendorWatch.latest.alertDecision.eligible, false)
+  assert.equal(vendorWatch.latest.contractGap.deltaMinor, 14000)
+  vendorUnsupported = true
+  vendorWatch = await ok('checkWatch', v())
+  assert.equal(vendorWatch.latest.outcome, 'needs_review')
+  vendorUnsupported = false
+  vendorOversized = true
+  vendorWatch = await ok('checkWatch', v())
+  assert.equal(vendorWatch.latest.outcome, 'needs_review')
+  assert.match(vendorWatch.latest.message, /supported capture size/)
+  vendorOversized = false
+  let alternative = await ok('createWatch', alternativeInput)
+  alternative = await ok('captureBaseline', { id: alternative.id, revision: alternative.revision })
+  alternative = await ok('confirmBaseline', {
+    id: alternative.id, revision: alternative.revision, snapshotId: alternative.candidate.snapshotId,
+  })
+  const comparisonInput = {
+    ids: [vendorWatch.id, alternative.id], seats: 25, currency: 'USD', cadence: 'month',
+    features: ['SSO', 'SCIM'],
+  }
+  const comparison = await ok('compareWatches', comparisonInput)
+  assert.equal(comparison.options[0].totalMinor, 97500)
+  assert.equal(comparison.options[0].features[0].state, 'included')
+  assert.equal(comparison.options[0].features[1].state, 'unknown')
+  assert.equal((await ok('compareWatches', { ...comparisonInput, currency: 'EUR' })).options[0].totalMinor, null)
+  assert.equal((await post('compareWatches', comparisonInput, otherToken)).code, 'not_found')
+  const portfolio = await ok('getPortfolio')
+  assert.deepEqual(portfolio.totals, [{ currency: 'USD', cadence: 'month', deltaMinor: 10000, watchCount: 1 }])
+  assert.equal(portfolio.attention[0].watchId, vendorWatch.id)
+  assert.equal((await post('getPortfolio', {}, otherToken)).data.changes.length, 0)
+  const dateAhead = n => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10)
+  vendorWatch = await ok('setContractTerms', { ...v(), contract: {
+    priceMinor: 2500, currency: 'USD', cadence: 'month', renewalDate: dateAhead(20),
+    noticeDate: dateAhead(1), timezone: 'UTC', leadDays: 2,
+  } })
+  for (let i = 0; i < 30 && vendorWatch.reminder?.state !== 'accepted'; i++) {
+    await new Promise(resolve => setTimeout(resolve, 150))
+    vendorWatch = await ok('getWatch', { id: vendorWatch.id })
+  }
+  assert.equal(vendorWatch.reminder?.state, 'accepted')
+  vendorWatch = await ok('setContractTerms', { ...v(), contract: { ...vendorWatch.contract, leadDays: 3 } })
+  assert.equal(vendorWatch.reminder?.state, 'accepted')
+  assert.equal((await post('checkWatch', v())).code, 'budget_limit')
+  const buyer = (await post('createWatch', alternativeInput, otherToken)).data
+  const buyerCapture = await post('captureBaseline', { id: buyer.id, revision: buyer.revision }, otherToken)
+  assert.equal(buyerCapture.data.candidate.priceMinor, 3900)
+  assert.equal((await post('captureBaseline', {
+    id: buyer.id, revision: buyerCapture.data.revision,
+  }, otherToken)).code, 'budget_limit')
+  assert.equal((await post('removeWatch', { id: buyer.id, revision: buyerCapture.data.revision }, otherToken)).success, true)
+  assert.equal(calls.filter(call => call.endpoint === 'send').length, 5)
+  await ok('removeWatch', v())
+  await ok('removeWatch', { id: alternative.id, revision: alternative.revision })
+  amount = 29
   const demo = await runtime.dispatchFetch('http://localhost/demo-pricing')
   assert.equal(demo.status, 200)
   assert.match(await demo.text(), /USD \$29 per seat per month/)
@@ -336,6 +434,11 @@ try {
         const body = await response.json()
         body.data.impact.current.excerpt += '\n' + 'x'.repeat(500)
         body.data.snapshot.markdown += '\n' + 'y'.repeat(500)
+        body.data.packaging = {
+          state: 'changed', belowMinimum: true,
+          previous: { seats: 5, excerpt: 'Minimum 5 seats', capturedAt: body.data.impact.old.capturedAt },
+          current: { seats: 12, excerpt: 'Minimum 12 seats', capturedAt: body.data.impact.current.capturedAt },
+        }
         await route.fulfill({ response, json: body })
       })
       await page.getByRole('button', { name: 'Refresh report' }).click()
@@ -347,11 +450,60 @@ try {
         await buttons.first().click()
         await images.nth(1).waitFor()
       }
+      const packaging = report.getByRole('region', { name: 'Packaging findings' })
+      await packaging.getByText('Minimum 5 seats', { exact: true }).waitFor()
+      await packaging.getByText('Minimum 12 seats', { exact: true }).waitFor()
+      await packaging.getByText('The current minimum exceeds your seat count.').waitFor()
       await page.getByText('Captured page text').click()
       await page.setViewportSize({ width: 390, height: 844 })
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
       await audit()
-      console.log('Axe, keyboard focus, and mobile checks passed.')
+      const settings = page.getByRole('region', { name: 'Watch settings' })
+      await settings.getByText('Contract and renewal', { exact: true }).click()
+      await settings.getByLabel('Contracted rate per seat').fill('25')
+      await settings.getByLabel('Renewal date', { exact: true }).fill(dateAhead(20))
+      await settings.getByLabel('Cancellation notice deadline').fill(dateAhead(10))
+      await settings.getByRole('button', { name: 'Save contract' }).click()
+      await settings.getByText(/Contract \$250\.00 · listed \$390\.00.*\+\$140\.00\/month/).waitFor()
+      await settings.getByText('Scheduled checks', { exact: true }).click()
+      await settings.getByLabel('Frequency').selectOption('weekly')
+      await settings.getByLabel('Local hour (0–23)', { exact: true }).fill(String((new Date().getUTCHours() + 2) % 24))
+      await settings.getByLabel('Check timezone').fill('UTC')
+      await settings.getByRole('button', { name: 'Save schedule' }).click()
+      await settings.getByRole('button', { name: 'Clear schedule' }).waitFor()
+      await settings.getByText('Price alert rules', { exact: true }).click()
+      await settings.getByLabel('Decreases', { exact: true }).uncheck()
+      await settings.getByLabel('Minimum team cost change (USD)').fill('125')
+      await settings.getByRole('button', { name: 'Save alert rule' }).click()
+      await settings.getByRole('button', { name: 'Restore default' }).waitFor()
+      const savedBrowserWatch = (await ok('listWatches')).find(item => item.vendor === 'Alder Desk')
+      assert.equal(savedBrowserWatch.contract.priceMinor, 2500)
+      assert.equal(savedBrowserWatch.schedule.frequency, 'weekly')
+      assert.equal(savedBrowserWatch.alertRule.minAmountMinor, 12500)
+      assert.equal(savedBrowserWatch.alertRule.decreases, false)
+
+      const otherPlan = await ok('createWatch', { ...input, vendor: 'Fixture alternative' })
+      const ready = await ok('captureBaseline', { id: otherPlan.id, revision: otherPlan.revision })
+      await ok('confirmBaseline', { id: otherPlan.id, revision: ready.revision, snapshotId: ready.candidate.snapshotId })
+      await page.reload()
+      const portfolio = page.getByRole('region', { name: 'Portfolio' })
+      await portfolio.getByRole('button', { name: 'Load portfolio' }).click()
+      await portfolio.getByText(/USD · \+\$100\.00\/month across 1 watch/).waitFor()
+      await portfolio.getByText(/Notice by/).waitFor()
+      await portfolio.getByRole('button', { name: 'Alder Desk report' }).click()
+      await page.getByText('+$100.00/month for 10 seats', { exact: true }).waitFor()
+
+      const comparison = page.getByRole('region', { name: 'Compare plans' })
+      await comparison.getByRole('checkbox', { name: 'Alder Desk · Pro' }).check()
+      await comparison.getByRole('checkbox', { name: 'Fixture alternative · Pro' }).check()
+      await comparison.getByLabel('Comparison seats').fill('25')
+      await comparison.getByLabel('Must-have features').fill('SSO')
+      await comparison.getByRole('button', { name: 'Compare selected watches' }).click()
+      await comparison.getByRole('heading', { name: /Listed prices at 25 seats/ }).waitFor()
+      assert.equal(await comparison.getByText('$975.00/month', { exact: true }).count(), 2)
+      assert.equal(await comparison.getByText('SSO · unknown', { exact: true }).count(), 2)
+      await audit()
+      console.log('Axe, keyboard focus, mobile, watch settings, portfolio, and comparison passed.')
       console.log('Browser signed-out, setup, baseline, report, history reload and mobile width passed.')
     } finally {
       await browser.close()

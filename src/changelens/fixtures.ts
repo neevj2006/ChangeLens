@@ -98,3 +98,21 @@ export const uiFixtures = {
   },
   stale: { success: false, code: 'stale_revision', error: 'Reload the watch and try again.' } satisfies Result<never>,
 }
+
+export const expandedWatchFixture = {
+  ...uiFixtures.changed,
+  contract: {
+    priceMinor: 2500, currency: 'USD', cadence: 'month',
+    renewalDate: '2027-01-10', noticeDate: '2026-12-20',
+    timezone: 'America/New_York', leadDays: 7,
+  },
+  contractGap: {
+    state: 'comparable', currency: 'USD', cadence: 'month', seats: 10,
+    contractMinor: 25000, listedMinor: 39000, deltaMinor: 14000,
+  },
+  schedule: { frequency: 'weekly', timezone: 'America/New_York', hour: 9 },
+  monitoring: {
+    nextAt: '2026-11-30T14:00:00Z', lastSuccessAt: '2026-11-23T15:10:00Z', consecutiveFailures: 0,
+  },
+  alertRule: { increases: true, decreases: false, minAmountMinor: 10000, minBasisPoints: null },
+} satisfies Watch

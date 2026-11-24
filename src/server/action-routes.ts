@@ -75,7 +75,8 @@ export function registerActionRoutes(app: Hono<AppContext>, resolveAuth: Resolve
       return c.json({ success: false, code: 'invalid_input', error: 'Send a JSON object.' }, 400)
     }
     let verifiedEmail: string | undefined
-    if ((name === 'checkWatch' || name === 'retryAlert') && c.env.CHANGELENS_ENABLE_EMAIL === 'true') {
+    if (name === 'setContractTerms' || name === 'setWatchSchedule' ||
+        ((name === 'checkWatch' || name === 'retryAlert') && c.env.CHANGELENS_ENABLE_EMAIL === 'true')) {
       try {
         const session = await authWorkerFetch(c.env, '/api/auth/get-session', {
           headers: { Cookie: c.req.header('Cookie') ?? '' },
@@ -179,6 +180,3 @@ export function createActionTools(env: Env, userId: string, callerJwt: string): 
     registerUser: (options) => execTool('users.register', { ...options }),
   }
 }
-
-
-

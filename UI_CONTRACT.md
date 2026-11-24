@@ -27,3 +27,17 @@ Confirmed email rejections can be retried through `retryAlert({ id, revision, ch
 Evidence may include screenshot status. Existing reports may omit the field. For available images call `getScreenshot({ id, snapshotId })` with the watch ID and evidence snapshot ID. The authenticated action returns a raster MIME type and base64 bytes. Render privately in the report and keep provider URLs out of the client. Screenshot capture is best effort on the direct Firecrawl v2 path and is available only for new verified evidence.
 
 A changed check may include its captured vendor name. The copy summary uses the saved report and original seat count. For historical records without a captured vendor, use the source hostname. The calculator uses the same integer minor-unit arithmetic and keeps hypothetical amounts local to the page.
+
+## Expanded backend actions
+
+These actions use the normal signed-in action route and owner-scoped watches.
+
+| Action | Behavior |
+| --- | --- |
+| setContractTerms | Takes id, revision, and contract or null. Returns a watch with the comparable gap or an unavailable reason. A non-null leadDays requires a verified account session. |
+| setWatchSchedule | Takes id, revision, and schedule or null. The schedule is daily or weekly at a local hour in an IANA timezone. The watch returns monitoring state with last successful capture, next attempt, failure count, and any budget skip. |
+| setAlertRule | Takes id, revision, and rule or null. Both configured thresholds must pass. Dollar thresholds use the saved team total in minor units. Percentage thresholds use basis points and cannot be met from a zero base when a positive percentage is required. |
+| compareWatches | Takes two to eight watch IDs, a shared seat count, currency, cadence, and up to 20 must-have features. Returns evidence, comparable cost or a reason, 30-day staleness, and included, excluded, or unknown claims. |
+| getPortfolio | Takes optional windowDays, default 30 and maximum 365. Returns the latest transition per current watch, upcoming notice dates, attention items, currency-and-period groups, and exclusions. |
+
+Comparable checks can include contractGap, alertDecision, a dated seat-minimum finding, and packagingChanges for explicitly evidenced feature and allowance changes. Packaging findings do not turn an unchanged listed price into a price change. Scheduled work uses the latest confirmed scope. Missing evidence stays unknown. Monitoring rolls the visible history to 30 checks and retains evidence referenced by those reports or the current baseline.
