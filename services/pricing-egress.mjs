@@ -9,7 +9,7 @@ import Turndown from 'turndown'
 import gfm from 'turndown-plugin-gfm'
 
 class UnsupportedPricingPage extends Error {}
-const maxBytes = 512 * 1024
+const maxBytes = 2 * 1024 * 1024
 const converter = new Turndown({ headingStyle: 'atx' })
 converter.use(gfm.tables)
 converter.remove(['script', 'style', 'noscript', 'iframe', 'svg'])
