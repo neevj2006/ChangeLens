@@ -27,6 +27,7 @@ run_worker_first = ["/demo-pricing", "/api/*", "/ws/*", "/internal/*", "/v1/*", 
 # subdomain label the next deploy claims; this id never changes — data,
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
+CHANGELENS_VENDOR_EGRESS_URL = "https://fleet-vega-3a736gn.tmp.now"
 CHANGELENS_PUBLIC_CAPTURE = "true"
 CHANGELENS_ENABLE_SCHEDULES = "true"
 CHANGELENS_ENABLE_REMINDER_EMAIL = "true"
