@@ -66,10 +66,10 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
       } else if (endpoint === 'chat-completion') {
         assert.equal(body.model, 'gpt-4.1-mini')
         const source = JSON.parse(body.messages[1].content).source
-        data = { choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({
+        data = { choices: [{ finish_reason: 'stop', message: { content: String.fromCharCode(96).repeat(3) + 'json\n' + JSON.stringify({
           plan: 'Pro', currency: 'USD', cadence: 'month', unit: 'seat',
           priceMinor: amount * 100, excerpt: source.slice(source.indexOf('## Pro')),
-        }) } }] }
+        }) + '\n' + String.fromCharCode(96).repeat(3) } }] }
       } else if (endpoint === 'send') {
         if (deliveryUnknown) return Response.json({ success: false, error: 'ambiguous' }, { status: 502 })
         data = { id: 'fixture-delivery' }
@@ -233,6 +233,7 @@ try {
 } finally {
   await runtime.dispose()
 }
+
 
 
 

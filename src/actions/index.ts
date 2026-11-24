@@ -68,6 +68,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
   if (ctx.env.CHANGELENS_PRICING_URL !== watch.url || ctx.env.CHANGELENS_ENABLE_CAPTURE !== 'true') {
     return failure('capture_unavailable', 'Capture is available for the configured demo pricing page when enabled.')
   }
+  if (ctx.userId !== ctx.env.OWNER_USER_ID) return failure('capture_unavailable', 'Demo capture requires the app owner.')
   if (!baseline && (watch.status !== 'armed' || !state.comparable)) {
     return failure('not_armed', 'Confirm the baseline and resume the watch before checking.')
   }
@@ -132,7 +133,9 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean) {
     })
     const parsed = chatResult.safeParse(response.success ? response.data : null)
     if (!parsed.success) throw new Error('Incomplete extraction.')
-    const facts = verifyEvidence(source, JSON.parse(parsed.data.choices[0].message.content), watch)
+    const content = parsed.data.choices[0].message.content.trim()
+    const json = /^\x60{3}(?:json)?\s*([\s\S]+?)\s*\x60{3}$/i.exec(content)?.[1] ?? content
+    const facts = verifyEvidence(source, JSON.parse(json), watch)
     if (facts) {
       const evidence: Evidence = { ...facts, snapshotId: check.id, sourceUrl: watch.url, capturedAt: check.checkedAt }
       check.evidence = evidence
@@ -252,6 +255,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return success(snapshot ? { ...check, snapshot: { id: snapshot.id, markdown: snapshot.source } } : check)
   },
 }
+
 
 
 
