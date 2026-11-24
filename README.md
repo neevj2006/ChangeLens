@@ -64,5 +64,6 @@ ChangeLens shows software buyers what a public subscription price change means a
 5. Repeat the check with the page still at $39. The result should be unchanged. The cosmetic, failed and annual variants can then be tested in that order.
 6. To stage a fresh walkthrough, restore the baseline variant and create a fresh watch before advancing the page again. Leave email disabled until another test send is authorized.
 
-The live walkthrough verified the cost change, both excerpts, saved history, one inbox receipt and an unchanged repeat without another send in the billing ledger. Exa search settled for that report. Separate live testing returned Atlassian pricing links. The cosmetic page was deployed and its formatting was verified in the raw Firecrawl Markdown.
+The live walkthrough verified the cost change, both excerpts, saved history, one inbox receipt and an unchanged repeat without another send in the billing ledger. Exa search settled for that report. Separate live testing returned Atlassian pricing links. The owner verified formatting-only, failed-scrape, and annual-billing checks with no additional email. The public page was reset to the $29 baseline with email disabled after the walkthrough.
+
 
