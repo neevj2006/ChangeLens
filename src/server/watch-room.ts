@@ -90,6 +90,7 @@ export class WatchRoom {
       return new Response(null, { status: 429 })
     }
     if (!userId || userId.length > 200) return new Response(null, { status: 400 })
+    if (!testUntil && this.env.CHANGELENS_UNCAPPED === 'true') return new Response(null, { status: 204 })
     const accountLimit = Number(this.env.CHANGELENS_ACCOUNT_DAILY_LIMIT)
     const appLimit = Number(this.env.CHANGELENS_APP_DAILY_LIMIT)
     if (!Number.isSafeInteger(accountLimit) || !Number.isSafeInteger(appLimit) ||

@@ -138,8 +138,9 @@ async function vendorSnapshot(env: Env, url: string) {
 async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved = false) {
   const { watch } = state
   const demo = ctx.env.CHANGELENS_PRICING_URL === watch.url
-  if (demo && (ctx.env.CHANGELENS_ENABLE_CAPTURE !== 'true' || ctx.userId !== ctx.env.OWNER_USER_ID)) {
-    return failure('capture_unavailable', 'Configured demo capture requires the app owner.')
+  if (demo && (ctx.env.CHANGELENS_ENABLE_CAPTURE !== 'true' ||
+      (ctx.env.CHANGELENS_PUBLIC_CAPTURE !== 'true' && ctx.userId !== ctx.env.OWNER_USER_ID))) {
+    return failure('capture_unavailable', 'Demo capture is unavailable for this account.')
   }
   if (!demo && (!ctx.env.CHANGELENS_VENDOR_EGRESS_URL || !ctx.env.CHANGELENS_EGRESS_TOKEN)) {
     return failure('capture_unavailable', 'Public vendor capture is awaiting its egress configuration.')
@@ -147,7 +148,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
   if (!baseline && (watch.status !== 'armed' || !state.comparable)) {
     return failure('not_armed', 'Confirm the baseline and resume the watch before checking.')
   }
-  if ((!demo || ctx.env.CHANGELENS_TEST_UNTIL) && !budgetReserved && !await ctx.reserve?.()) {
+  if ((!demo || ctx.env.CHANGELENS_PUBLIC_CAPTURE === 'true' || ctx.env.CHANGELENS_TEST_UNTIL) && !budgetReserved && !await ctx.reserve?.()) {
     return failure('budget_limit', 'The capture budget is exhausted or disabled.')
   }
   const check: Check = {
@@ -425,7 +426,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
   async getCapabilities({ env, userId }) {
     const account = Number(env.CHANGELENS_ACCOUNT_DAILY_LIMIT)
     const app = Number(env.CHANGELENS_APP_DAILY_LIMIT)
-    const budget = Number.isSafeInteger(account) && Number.isSafeInteger(app) && account >= 1 && account <= app && app <= 1_000
+    const budget = env.CHANGELENS_UNCAPPED === 'true' || Number.isSafeInteger(account) && Number.isSafeInteger(app) && account >= 1 && account <= app && app <= 1_000
     const testAllowed = !env.CHANGELENS_TEST_UNTIL ||
       (userId === env.OWNER_USER_ID && Date.parse(env.CHANGELENS_TEST_UNTIL) > Date.now())
     return success({
@@ -546,8 +547,9 @@ export const actions: Record<string, ActionHandler<Env>> = {
     if (ctx.env.CHANGELENS_ENABLE_EMAIL !== 'true' || !ctx.defer || !recipient) {
       return failure('retry_unavailable', 'Email retry requires a verified account and enabled delivery.')
     }
-    if (impact.current.sourceUrl !== ctx.env.CHANGELENS_PRICING_URL &&
-        ctx.env.CHANGELENS_VENDOR_EGRESS_URL && !await ctx.reserve?.()) {
+    if ((ctx.env.CHANGELENS_PUBLIC_CAPTURE === 'true' ||
+        (impact.current.sourceUrl !== ctx.env.CHANGELENS_PRICING_URL && ctx.env.CHANGELENS_VENDOR_EGRESS_URL)) &&
+        !await ctx.reserve?.()) {
       return failure('budget_limit', 'The delivery budget is exhausted or disabled.')
     }
     check.alert = { state: 'pending' }

@@ -27,10 +27,14 @@ run_worker_first = ["/demo-pricing", "/api/*", "/ws/*", "/internal/*", "/v1/*", 
 # subdomain label the next deploy claims; this id never changes — data,
 # secrets, and collaborators all key to it. Renames are safe.
 [vars]
+CHANGELENS_PUBLIC_CAPTURE = "true"
+CHANGELENS_ENABLE_SCHEDULES = "true"
+CHANGELENS_ENABLE_REMINDER_EMAIL = "true"
+CHANGELENS_UNCAPPED = "true"
 CHANGELENS_DEMO_VARIANT = "baseline"
 CHANGELENS_FIRECRAWL_MODE = "direct"
 CHANGELENS_ENABLE_CAPTURE = "true"
-CHANGELENS_ENABLE_EMAIL = "false"
+CHANGELENS_ENABLE_EMAIL = "true"
 CHANGELENS_ENABLE_EXA = "true"
 CHANGELENS_PRICING_URL = "https://changelens.app.space/demo-pricing"
 DEEPSPACE_APP_ID = "app_01M85H99WTT1MA6WV2782M9G6Y"
