@@ -44,3 +44,27 @@
   --color-shell: #fafafa;
   --color-shell-panel: #ffffff;
 }
+
+[data-theme="changelens"] {
+  color-scheme: dark;
+  --color-background: #06141B;
+  --color-foreground: #CCD0CF;
+  --color-card: #11212D;
+  --color-card-foreground: #CCD0CF;
+  --color-popover: #11212D;
+  --color-popover-foreground: #CCD0CF;
+  --color-primary: #CCD0CF;
+  --color-primary-foreground: #06141B;
+  --color-secondary: #253745;
+  --color-secondary-foreground: #CCD0CF;
+  --color-muted: #253745;
+  --color-muted-foreground: #9BA8AB;
+  --color-accent: #253745;
+  --color-accent-foreground: #CCD0CF;
+  --color-border: #253745;
+  --color-input: #4A5C6A;
+  --color-ring: #CCD0CF;
+  --color-shell: #06141B;
+  --color-shell-panel: #11212D;
+  --radius: .8rem;
+}

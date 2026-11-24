@@ -1,14 +1,21 @@
 import type { FormEvent } from 'react'
+import { DateField } from './date-field'
 import { callAction } from './client'
 import type { Cadence, Capabilities, Check, Currency, Watch } from './contract'
 import { money } from './report'
 
-export const panel = 'min-w-0 space-y-3 rounded-xl border border-border bg-card p-4'
+export const panel = 'cl-panel space-y-3'
 export const control = 'block w-full rounded-md border border-border bg-background px-3 py-2'
 export const action = 'rounded-md border border-border px-3 py-2 hover:bg-muted disabled:opacity-50'
 const grid = 'grid gap-3 sm:grid-cols-2'
 const currencies = ['USD', 'EUR', 'GBP', 'CAD', 'AUD'] as const
-const localTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
+function TimezoneInput({ label, value }: { label: string; value?: string }) {
+  const selected = value ?? Intl.DateTimeFormat().resolvedOptions().timeZone
+  const zones = [...new Set(['UTC', selected, ...Intl.supportedValuesOf('timeZone')])]
+  return <label>{label}<select className={control} name="timezone" defaultValue={selected} required>
+    {zones.map(zone => <option key={zone} value={zone}>{zone.replaceAll('_', ' ')}</option>)}
+  </select></label>
+}
 const formData = (event: FormEvent<HTMLFormElement>) => {
   event.preventDefault()
   return new FormData(event.currentTarget)
@@ -57,9 +64,9 @@ export function WatchSettings({ watch, busy, save, capabilities }: {
             step="0.01" defaultValue={terms ? terms.priceMinor / 100 : ''} required /></label>
           <CurrencyInput currency={terms?.currency ?? watch.currency} />
           <PeriodInput cadence={terms?.cadence ?? watch.cadence} />
-          <label>Renewal date<input className={control} name="renewal" type="date" defaultValue={terms?.renewalDate} required /></label>
-          <label>Cancellation notice deadline<input className={control} name="notice" type="date" defaultValue={terms?.noticeDate} required /></label>
-          <label>Contract timezone<input className={control} name="timezone" defaultValue={terms?.timezone ?? localTimezone()} required /></label>
+          <DateField label="Renewal date" name="renewal" control={control} initial={terms?.renewalDate} />
+          <DateField label="Cancellation notice deadline" name="notice" control={control} initial={terms?.noticeDate} />
+          <TimezoneInput label="Contract timezone" value={terms?.timezone} />
           <label>Reminder days before deadline<input className={control} name="leadDays" type="number" min={0} max={365}
             defaultValue={terms?.leadDays ?? ''} aria-describedby="renewal-optional" />
             <small id="renewal-optional">Leave blank to skip email reminders.</small></label>
@@ -89,7 +96,7 @@ export function WatchSettings({ watch, busy, save, capabilities }: {
             <option value="daily">Daily</option><option value="weekly">Weekly</option>
           </select></label>
           <label>Local hour (0–23)<input className={control} name="hour" type="number" min={0} max={23} defaultValue={schedule?.hour ?? 9} required /></label>
-          <label>Check timezone<input className={control} name="timezone" defaultValue={schedule?.timezone ?? localTimezone()} required /></label>
+          <TimezoneInput label="Check timezone" value={schedule?.timezone} />
         </fieldset>
         <div className="flex flex-wrap gap-2"><button className={action} disabled={busy}>Save schedule</button>
           {schedule && <button className={action} type="button" disabled={busy}

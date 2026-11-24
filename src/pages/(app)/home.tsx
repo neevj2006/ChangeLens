@@ -1,3 +1,5 @@
+import { Activity, ExternalLink, Plus } from 'lucide-react'
+import '../../changelens/design.css'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useAuthStatus } from 'deepspace'
 import { formatSummary, MAX_SEATS, money, totalsAtSeats } from '../../changelens/report'
@@ -8,9 +10,9 @@ import type { Capabilities, Check, Evidence, Impact, Watch, WatchInput } from '.
 
 const initial: WatchInput = { vendor: '', url: '', plan: '', seats: 10, currency: 'USD', cadence: 'month' }
 const button = 'rounded-md border border-border px-3 py-2 font-medium hover:bg-muted disabled:opacity-50'
-const primary = 'rounded-md bg-slate-800 px-3 py-2 font-medium text-white disabled:opacity-50'
+const primary = 'rounded-md bg-primary px-4 py-2.5 font-semibold text-primary-foreground disabled:opacity-50'
 const field = 'block w-full rounded-md border border-border bg-background px-3 py-2'
-const card = 'min-w-0 space-y-3 rounded-xl border border-border bg-card p-4'
+const card = 'cl-panel space-y-3'
 const outcome: Record<Check['outcome'], string> = {
   baseline_ready: 'Baseline ready', changed: 'Price changed', unchanged: 'Unchanged',
   cosmetic: 'Formatting changed', needs_review: 'Needs review', failed: 'Check failed',
@@ -78,20 +80,20 @@ function Workspace() {
 
   const key = selected && { id: selected.id, revision: selected.revision }
   return (
-    <section className="mx-auto max-w-6xl space-y-6 px-4 py-8" aria-busy={busy}>
+    <section className="cl-workspace mx-auto max-w-7xl space-y-7 px-4 py-8 sm:px-8 sm:py-10" aria-busy={busy}>
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div><h1 className="text-3xl font-bold">ChangeLens</h1>
-          <p className="text-muted-foreground">Track listed prices and see the impact at your seat count.</p></div>
-        <button className={primary} disabled={busy} onClick={() => { setSelected(null); setForm(true); setError('') }}>Add watch</button>
+        <div className="space-y-3"><h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Pricing workspace</h1>
+          <p className="leading-relaxed text-muted-foreground">Track listed prices and see the impact at your seat count.</p></div>
+        <button className={primary} disabled={busy} onClick={() => { setSelected(null); setForm(true); setError('') }}><span className="inline-flex items-center gap-2"><Plus size={17} aria-hidden="true" />Add watch</span></button>
       </header>
       {busy && <p role="status">Working…</p>}
       {error && <p role="alert" className="rounded-md border border-destructive p-3">{error}</p>}
-      <div className="grid gap-4 md:grid-cols-[15rem_minmax(0,1fr)]">
-        <aside className={card}>
-          <h2 className="text-lg font-semibold">Watches</h2>
+      <div className="grid gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <aside className={card + ' self-start'}>
+          <h2 className="flex items-center gap-2 text-lg font-semibold"><Activity size={17} aria-hidden="true" /> Watches <span className="ml-auto text-sm text-muted-foreground">{watches.length}</span></h2>
           {!watches.length && !busy && <p>No watches yet.</p>}
           <ul className="space-y-2">{watches.map(watch => <li key={watch.id}>
-            <button className={button + ' w-full text-left break-words'} disabled={busy} aria-pressed={selected?.id === watch.id}
+            <button className={button + ' cl-watch w-full text-left break-words'} disabled={busy} aria-pressed={selected?.id === watch.id}
               onClick={() => { setForm(false); void run(async () => show(await callAction('getWatch', { id: watch.id }))) }}>
               <span className="block">{watch.vendor} · {watch.plan}</span>
               <span className="block text-sm">{watch.seats} seats · {watch.status}</span>
@@ -109,10 +111,10 @@ function Workspace() {
             })} />}
           {selected && key && <>
             <section className={card}>
-              <h2 className="break-words text-xl font-semibold">{selected.vendor} · {selected.plan}</h2>
+              <h2 className="break-words text-2xl font-semibold tracking-tight">{selected.vendor} · {selected.plan}</h2>
               <p>{selected.currency} per {selected.cadence} · {selected.seats} seats · {selected.status}</p>
-              <a className="break-all underline" href={selected.url} target="_blank" rel="noreferrer">Open pricing page</a>
-              <div className="flex flex-wrap gap-2">
+              <a className="cl-link inline-block" href={selected.url} target="_blank" rel="noreferrer">Open pricing page <ExternalLink aria-hidden="true" /></a>
+              <div className="flex flex-wrap gap-2 pt-2">
                 <button className={primary} disabled={busy || selected.status !== 'armed'} onClick={() => void run(async () => show(await callAction('checkWatch', key)))}>Check now</button>
                 <button className={button} disabled={busy} onClick={() => void run(async () => show(await callAction('captureBaseline', key)))}>{selected.baseline ? 'Capture new baseline' : 'Capture baseline'}</button>
                 <button className={button} disabled={busy} onClick={() => setForm(true)}>Edit watch</button>
@@ -218,7 +220,7 @@ function EvidenceCard({ heading, evidence, watchId }: { heading: string; evidenc
     <h3 className="font-semibold">{heading}</h3>
     <p>{evidence.plan} · {money(evidence.priceMinor, evidence.currency)} per seat per {evidence.cadence}</p>
     <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere] border-l-2 border-border pl-3">{evidence.excerpt}</blockquote>
-    <p className="text-sm"><a className="underline" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing source</a> · {date(evidence.capturedAt)}</p>
+    <p className="text-sm"><a className="cl-link" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing source<ExternalLink aria-hidden="true" /></a> · {date(evidence.capturedAt)}</p>
     {evidence.screenshot === 'available' ? <>
       <button className={button} disabled={loading} aria-expanded={!!currentImage}
         onClick={() => currentImage ? setImage(undefined) : void showScreenshot()}>
@@ -233,11 +235,11 @@ function EvidenceCard({ heading, evidence, watchId }: { heading: string; evidenc
 
 function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise<void>; busy: boolean }) {
   const { impact, context } = check
-  return <section className={card} aria-label="Check report">
+  return <section className={card + ' cl-report'} aria-label="Check report">
     <h2 className="text-lg font-semibold">{outcome[check.outcome]}</h2><p>{check.message}</p>
     {impact ? <>
-      <p className="text-xl font-semibold">{money(impact.oldTotalMinor, impact.old.currency)} → {money(impact.newTotalMinor, impact.current.currency)}</p>
-      <p className="font-semibold">{impact.deltaMinor > 0 ? '+' : ''}{money(impact.deltaMinor, impact.current.currency)}/{impact.current.cadence} for {impact.seats} seats</p>
+      <div className="cl-impact space-y-2 p-4 sm:p-5"><p className="text-2xl font-semibold tracking-tight sm:text-4xl">{money(impact.oldTotalMinor, impact.old.currency)} → {money(impact.newTotalMinor, impact.current.currency)}</p>
+      <p className="font-semibold">{impact.deltaMinor > 0 ? '+' : ''}{money(impact.deltaMinor, impact.current.currency)}/{impact.current.cadence} for {impact.seats} seats</p></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <EvidenceCard watchId={check.watchId} heading="Previous price" evidence={impact.old} />
         <EvidenceCard watchId={check.watchId} heading="Current price" evidence={impact.current} />
@@ -249,7 +251,7 @@ function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise
       {context.state === 'empty' && <p>No relevant context found</p>}
       {context.state === 'failed' && <p>Context lookup did not complete.</p>}
       {context.state === 'found' && <ul className="list-disc pl-5">{context.sources.map(source => <li key={source.url}>
-        <a className="break-words underline" href={source.url} target="_blank" rel="noreferrer">{source.title}</a>
+        <a className="cl-link" href={source.url} target="_blank" rel="noreferrer">{source.title}<ExternalLink aria-hidden="true" /></a>
         {source.publishedAt && ' · ' + date(source.publishedAt)}
       </li>)}</ul>}
     </> : check.evidence && <EvidenceCard watchId={check.watchId} heading="Pricing evidence" evidence={check.evidence} />}

@@ -17,6 +17,7 @@
  */
 
 export const THEMES = [
+  { id: 'changelens', label: 'ChangeLens', description: 'Deep teal and cool slate.' },
   {
     id: 'slate',
     label: 'Slate',
@@ -33,9 +34,9 @@ export type ThemeId = (typeof THEMES)[number]['id']
 
 /** Read the currently active theme id from <html data-theme>. */
 export function getActiveTheme(): ThemeId {
-  if (typeof document === 'undefined') return 'slate'
+  if (typeof document === 'undefined') return 'changelens'
   const id = document.documentElement.getAttribute('data-theme') as ThemeId | null
-  return id ?? 'slate'
+  return id ?? 'changelens'
 }
 
 /** Look up a theme entry by id, or fall back to the first theme. */

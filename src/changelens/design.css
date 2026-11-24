@@ -1,0 +1,137 @@
+/* ChangeLens surfaces and focus treatment. */
+.cl-workspace {
+  background: radial-gradient(ellipse at 76% 0%, #11212D 0, transparent 42rem);
+}
+.cl-workspace :is(button, a, summary, input, select, textarea):focus-visible {
+  outline: 2px solid #CCD0CF;
+  outline-offset: 3px;
+}
+.cl-workspace :is(input:not([type="checkbox"]), select, textarea) {
+  border-color: #4A5C6A;
+}
+.cl-panel {
+  border: 1px solid #253745;
+  border-radius: 1.25rem;
+  background: #11212D;
+  padding: clamp(1rem, 2.3vw, 1.5rem);
+  min-width: 0;
+}
+.cl-workspace details > summary {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .65rem .7rem;
+  border-radius: .65rem;
+  cursor: pointer;
+  list-style: none;
+}
+.cl-workspace details > summary::-webkit-details-marker {
+  display: none;
+}
+.cl-workspace details > summary::after {
+  content: '';
+  flex: 0 0 .45rem;
+  height: .45rem;
+  margin-inline-end: .25rem;
+  border-right: 1.5px solid #9BA8AB;
+  border-bottom: 1.5px solid #9BA8AB;
+  transform: rotate(45deg);
+}
+.cl-workspace details[open] > summary::after {
+  transform: rotate(225deg);
+}
+.cl-workspace details > summary:hover,
+.cl-workspace details[open] > summary {
+  background: #253745;
+}
+.cl-workspace select {
+  appearance: none;
+  padding-inline-end: 2.5rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%239BA8AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right .7rem center;
+  background-repeat: no-repeat;
+}
+.cl-link {
+  color: #CCD0CF;
+  text-decoration: none;
+  text-underline-offset: .24em;
+  overflow-wrap: anywhere;
+}
+.cl-link:hover {
+  text-decoration: underline;
+}
+.cl-link svg {
+  display: inline-block;
+  width: .9em;
+  height: .9em;
+  margin-inline-start: .3em;
+  vertical-align: -.1em;
+  color: #9BA8AB;
+}
+.cl-workspace details + details {
+  border-top: 1px solid #253745;
+}
+.cl-watch[aria-pressed="true"] {
+  background: #253745;
+  border-color: #9BA8AB;
+}
+.cl-impact {
+  background: linear-gradient(115deg, #253745, #11212D);
+  border: 1px solid #4A5C6A;
+  border-radius: 1rem;
+}
+.cl-report blockquote {
+  background: #06141B;
+  border-radius: .4rem;
+  padding: .65rem .85rem;
+}
+
+.cl-date input {
+  padding-inline-end: 2.75rem;
+}
+.cl-date input::-webkit-calendar-picker-indicator {
+  display: none;
+}
+.cl-date-trigger {
+  position: absolute;
+  inset-block: .125rem;
+  inset-inline-end: .125rem;
+  display: grid;
+  width: 2.25rem;
+  place-items: center;
+  border-radius: .5rem;
+  color: #9BA8AB;
+}
+.cl-calendar {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + .4rem);
+  inset-inline-start: 0;
+  width: min(18rem, 100%);
+  padding: .65rem;
+  border: 1px solid #4A5C6A;
+  border-radius: .8rem;
+  background: #11212D;
+  box-shadow: 0 12px 28px #06141B;
+}
+.cl-calendar button {
+  display: grid;
+  min-height: 2rem;
+  min-width: 2rem;
+  place-items: center;
+  border-radius: .4rem;
+}
+.cl-calendar button:hover,
+.cl-date-trigger:hover {
+  background: #253745;
+  color: #CCD0CF;
+}
+.cl-calendar button[aria-current="date"] {
+  box-shadow: inset 0 0 0 1px #9BA8AB;
+}
+.cl-calendar button[aria-pressed="true"] {
+  background: #CCD0CF;
+  color: #06141B;
+}

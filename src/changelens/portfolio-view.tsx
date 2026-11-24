@@ -1,3 +1,4 @@
+import { ExternalLink } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { callAction } from './client'
 import type { Cadence, Comparison, Currency, Portfolio, Watch } from './contract'
@@ -33,7 +34,7 @@ export function PortfolioView({ busy, run, open }: {
         </li>)}</ul>
         {!!portfolio.excluded.length && <details><summary>{portfolio.excluded.length} excluded from totals</summary>
           <ul className="space-y-2">{portfolio.excluded.map(item => <li key={item.watchId}>{item.reason}
-            {' '}<button className="underline" onClick={() => open(item.watchId)}>Open excluded watch</button>
+            {' '}<button className="cl-link" onClick={() => open(item.watchId)}>Open excluded watch</button>
           </li>)}</ul>
         </details>}
       </div>
@@ -41,7 +42,7 @@ export function PortfolioView({ busy, run, open }: {
         <h3 className="font-semibold">Recent price changes</h3>
         {!portfolio.changes.length && <p>No verified price changes in this window.</p>}
         <ul className="space-y-2">{portfolio.changes.map(item => <li key={item.checkId}>
-          <button className="underline" onClick={() => open(item.watchId, item.checkId)}>{item.vendor} report</button>
+          <button className="cl-link" onClick={() => open(item.watchId, item.checkId)}>{item.vendor} report</button>
           {' · '}{signed(item.impact.deltaMinor, item.impact.current.currency)}/{item.impact.current.cadence}
           {' · '}<time dateTime={item.checkedAt}>{date(item.checkedAt)}</time>
         </li>)}</ul>
@@ -50,7 +51,7 @@ export function PortfolioView({ busy, run, open }: {
         <h3 className="font-semibold">Upcoming renewals</h3>
         {!portfolio.renewals.length && <p>No upcoming notice deadlines.</p>}
         <ul className="space-y-2">{portfolio.renewals.map(item => <li key={item.watchId}>
-          <button className="underline" onClick={() => open(item.watchId)}>{item.vendor}</button>
+          <button className="cl-link" onClick={() => open(item.watchId)}>{item.vendor}</button>
           <p>Notice by {item.noticeDate} · renews {item.renewalDate}</p>
         </li>)}</ul>
       </div>
@@ -58,7 +59,7 @@ export function PortfolioView({ busy, run, open }: {
         <h3 className="font-semibold">Needs attention</h3>
         {!portfolio.attention.length && <p>No watches need attention.</p>}
         <ul className="space-y-2">{portfolio.attention.map(item => <li key={item.watchId}>
-          <button className="underline" onClick={() => open(item.watchId, item.checkId ?? undefined)}>{item.vendor}</button>
+          <button className="cl-link" onClick={() => open(item.watchId, item.checkId ?? undefined)}>{item.vendor}</button>
           <p>{item.reason}{item.at ? ' · ' + date(item.at) : ''}</p>
         </li>)}</ul>
       </div>
@@ -105,7 +106,7 @@ export function ComparisonView({ watches, busy, run }: { watches: Watch[]; busy:
       <div className="grid gap-3 md:grid-cols-2">{comparison.options.map(option => <article className={panel} key={option.id}>
         <h4 className="font-semibold">{option.vendor} · {option.plan}</h4>
         <p>{option.totalMinor === null ? option.reason : money(option.totalMinor, comparison.currency) + '/' + comparison.cadence}</p>
-        {option.evidence && <p><a className="underline" href={option.evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing evidence</a>
+        {option.evidence && <p><a className="cl-link" href={option.evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing evidence<ExternalLink aria-hidden="true" /></a>
           {' · '}{date(option.evidence.capturedAt)}{option.stale ? ' · Older than 30 days' : ''}</p>}
         <ul className="space-y-1">{option.features.map(feature => <li key={feature.feature}>{feature.feature} · {feature.state}
           {feature.excerpt && <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere]">{feature.excerpt}</blockquote>}
