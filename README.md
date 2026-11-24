@@ -1,80 +1,72 @@
-# ChangeLens backend
+# ChangeLens
 
-ChangeLens tracks a selected plan's public per-seat price and reports the impact at the buyer's seat count. The scaffold uses DeepSpace 0.44.2. UI integration types and provider-free examples are linked in [UI_CONTRACT.md](UI_CONTRACT.md).
+ChangeLens helps software buyers understand what a vendor's public subscription price change means for their team. Create a private watch for a plan, confirm the starting price, and compare later captures at your seat count. Reports preserve the old and new pricing evidence so you can verify the change and decide what to review before renewal.
 
-## Local verification
+[Open ChangeLens](https://changelens.app.space/home) · [Demo pricing page](https://changelens.app.space/demo-pricing) · [Action and UI contract](UI_CONTRACT.md)
 
-From this checkout in PowerShell:
+## Core features
+
+| Feature | What it does |
+| --- | --- |
+| **Private pricing watches** | Track a public pricing URL, plan, currency, billing period, and seat count. Capture and confirm a baseline, then keep a history of checks. |
+| **Evidence and cost impact** | See the previous and current price, dated excerpts, source links, and privately saved screenshots when available. Get the listed team totals and the difference per billing period. |
+| **AI guidance** | OpenAI automatically explains ambiguous results when it has enough evidence. A usable AI-interpreted price carries an uncertainty label and can be used for a confirmed baseline or a comparable price alert. If the model returns neither useful guidance nor a usable price, the report shows **Needs review**. |
+| **Manual and scheduled checks** | Check on demand or set a daily or weekly schedule in your timezone. Pause and resume a watch, see the last successful check and next scheduled time, and review failures. |
+| **Price alerts and public context** | Choose increases, decreases, and optional team-cost and percentage thresholds. Qualifying changes can send an email to your verified address. Exa looks for related announcements and links relevant sources when available. |
+| **Contract and renewal tracking** | Record your contracted rate, renewal date, and cancellation notice deadline. See the contract-to-list gap when the rates are comparable, and optionally get a reminder before the notice deadline. |
+| **Packaging changes** | See dated before-and-after evidence for supported changes to seat minimums, named features, and usage allowances, even when the listed price stays the same. |
+| **Report tools** | Copy a summary with the original totals and evidence, or try another team size in the calculator while keeping the saved report intact. |
+| **Plan comparison and portfolio** | Compare watched plans at a common seat count, currency, and billing period. See evidence dates and must-have feature status. The portfolio brings together recent changes, upcoming renewals, and watches needing attention, with listed cost impacts grouped by currency and period. |
+
+## Workflow
+
+1. **Add a watch.** Sign in and enter the vendor, pricing URL, exact plan name, currency, billing period, and seat count.
+2. **Capture and confirm the baseline.** Review the extracted price and its excerpt. Open the screenshot if one was saved. Confirm the baseline to arm the watch. If the price couldn't be established, read the AI guidance or review status and check the source before trying again.
+3. **Set your preferences.** Optionally add a daily or weekly schedule, choose alert directions and thresholds, and save contract terms with a renewal reminder. If you set both alert thresholds, both must be met.
+4. **Run a check.** Click **Check now** or let the schedule run. ChangeLens saves the result in **Check history**. Failed captures and incomparable offers leave the last comparable price intact. Packaging findings can appear independently of a price change.
+5. **Review and share the impact.** Open the report to inspect both excerpts, screenshots, the email status, and any Exa context. Use **Copy summary** to share the saved numbers or the calculator to explore a different seat count.
+6. **Decide what to review.** Compare alternatives or open Portfolio to see which changes and notice dates deserve attention. Check your contract before treating a public-price change as a change to your bill.
+
+### Controlled walkthrough
+
+Use **Alder Desk · Pro · USD · Monthly · 10 seats** with the [demo pricing page](https://changelens.app.space/demo-pricing). The deployment operator sets the page to the baseline variant, then the buyer captures and confirms **$29 per seat per month**. After the operator deploys the increased variant at the same URL, **Check now** produces **$290 → $390**, or **+$100/month**. At 25 seats, the calculator shows **$725 → $975**, or **+$250/month**.
+
+The live walkthrough verified both screenshots, the copied summary, the calculator, and delivery of one test price-change email. Repeating the same price, changing only formatting, an unavailable page, and switching to annual billing produced no additional price alert. The demo variants are configured with `CHANGELENS_DEMO_VARIANT` in [wrangler.toml](wrangler.toml). Restore `baseline` to stage a fresh walkthrough.
+
+## Pricing and capture scope
+
+ChangeLens compares flat per-seat offers when the plan, currency, and billing period match. Base fees combined with optional seats, usage-based pricing, annual-billing equivalents, and regional variants may need separate interpretation or stay unverified. Public listed costs exclude taxes and account-specific contract terms.
+
+The controlled page uses Firecrawl v2 and can return screenshots with the pricing text. Real vendor URLs use an authenticated Node fetch service that validates public DNS destinations and pins the connection on each redirect. That service reads server-rendered HTML or text, caps responses at 2 MiB, and does not produce screenshots. Pages that require JavaScript or exceed capture limits may need review. Watch history retains the most recent 30 checks and preserves evidence referenced by the baseline and retained reports.
+
+## Development
+
+The main app uses React, TypeScript, Vite, and DeepSpace. DeepSpace provides authentication, records, server actions, and Worker hosting. Watch Durable Objects store private screenshots, serialize checks, and schedule background work. OpenAI handles extraction and review guidance. Exa supplies related context and DeepSpace transactional email delivers alerts and reminders.
+
+Use Node 22.15+ on the 22 line, Node 24, or Node 26, with npm 11.6+.
+
+```sh
+npm ci
+npm run login
+npm run dev
+```
+
+For local verification, build the app and run the Worker suite with simulated provider responses. The browser variable is optional and can be set to another installed Playwright Chromium channel.
 
 ```powershell
-npm ci
-(Get-Content wrangler.toml -Raw).Replace('__APP_ID__', 'app_00000000000000000000000000') |
-  Set-Content .wrangler.deepspace.offline.toml
-$env:CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH = '.wrangler.deepspace.offline.toml'
 npm run type-check
 npm run lint
 npm run test:unit
+node --test services/pricing-egress.test.mjs
 npm run build
+$env:CHANGELENS_TEST_FIRECRAWL = 'direct'
 $env:CHANGELENS_TEST_BROWSER = 'msedge'
 node tests/offline-runtime.mjs
-Remove-Item Env:CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH
-Remove-Item Env:CHANGELENS_TEST_BROWSER
+Remove-Item Env:CHANGELENS_TEST_FIRECRAWL, Env:CHANGELENS_TEST_BROWSER
 ```
 
-Use an installed Playwright Chromium channel or omit the browser variable for the Worker/API suite alone. The fixture ID is for the isolated build and is excluded from Git. The Worker suite uses real local DeepSpace Records, mocked sign-in and mocked provider responses.
+### Deployment configuration
 
-## Controlled page
-
-The Worker serves /demo-pricing without sign-in. Its pricing state comes from CHANGELENS_DEMO_VARIANT in wrangler.toml. For the hosted demo, release the baseline variant first, then change and release the variant while keeping the watched URL fixed. Use baseline, increased, cosmetic, failed, and annual for the walkthrough. Reset with baseline. Fixture previews also include wrongPlan, wrongCurrency, repeated and ambiguous.
-
-Live deployment requires a ChangeLens registration and the intended app slug. Before any authorized live call, configure CHANGELENS_PRICING_URL to the exact public HTTPS URL of the controlled pricing route. The capture flow is restricted to that configured pricing page and rejects failed or redirected preflight requests for an external controlled page. The built-in pricing route serves a response directly. Each scrape adds a check-specific query parameter to avoid reusing the same provider cache key. Evidence links retain the configured URL. Enable CHANGELENS_ENABLE_CAPTURE for Firecrawl and OpenAI, CHANGELENS_ENABLE_EMAIL for transactional delivery, and CHANGELENS_ENABLE_EXA for context after authorization. All four integrations charge the app developer. Live email recipients come from the verified DeepSpace account.
-
-| Integration | Published contract and current verification |
-| --- | --- |
-| Firecrawl | firecrawl/scrape accepts url, formats, onlyMainContent and timeout. Catalog output exposes data, creditsUsed and costUsd. The adapter expects Markdown and source URL in the provider data. Live envelope and scrape behavior remain open. |
-| OpenAI | openai/chat-completion accepts messages, model, max_tokens and temperature. The advertised gpt-4.1-mini model uses the Chat Completions response shape previously exercised by Handoff Check. ChangeLens validates the JSON and the exact associated plan-card text. |
-| Transactional email | email/send accepts a recipient, subject and plain text. Catalog price is $0.013 per request. Handoff Check verified a provider ID and inbox receipt from DeepSpace Apps. ChangeLens has verified the request and acceptance state with a mock. |
-| Exa | exa/search accepts query, numResults, type and contents. Catalog results include title, URL and publication date. ChangeLens checks vendor and pricing-change relevance. The mock verifies unrelated results are dropped. A real-vendor result remains open. |
-
-## Demo limits
-
-The current backend supports Markdown pricing cards with a standalone per-seat price and tables whose price columns explicitly identify currency, unit and billing period. Unsupported layouts and ambiguous cards require review. Watch history keeps the most recent 30 checks plus evidence referenced by the baseline and retained reports. A timed-out or interrupted email is surfaced as unknown and stays reserved. The verified demo account can explicitly retry a confirmed rejection through the retryAlert server action.
-
-
-
-## Screenshot citations
-
-A screenshot can sit alongside each text citation with its captured timestamp and original URL. Capturing both the baseline and later check is necessary to show how the page looked at each time. A later screenshot cannot reconstruct the old page. Store verified image bytes in owner-scoped storage if the provider returns a usable asset. Keep comparison and cost calculations grounded in the exact stored text. Screenshots are a possible follow-up. The current DeepSpace catalog accepts a format list, but ChangeLens has yet to verify screenshot support, asset lifetime, or billing through that integration. [Firecrawl scrape reference](https://docs.firecrawl.dev/api-reference/endpoint/scrape)
-
-
-### Firecrawl v2 connection
-
-CHANGELENS_FIRECRAWL_MODE=direct calls Firecrawl v2 from the authenticated Worker action. It uses Firecrawl keyless access by default and requests a fresh scrape. If keyless access is limited on the Worker network, the owner can configure FIRECRAWL_API_KEY as a DeepSpace secret. Gateway mode remains available by omitting CHANGELENS_FIRECRAWL_MODE. The direct path still uses Firecrawl, with DeepSpace handling hosting, authentication, records, and the other three integrations. [Firecrawl Keyless documentation](https://www.firecrawl.dev/blog/firecrawl-keyless-launch)
-
-## Submission walkthrough
-
-[Open ChangeLens](https://changelens.app.space/home) · [Controlled pricing page](https://changelens.app.space/demo-pricing)
-
-ChangeLens shows software buyers what a public subscription price change means at their seat count. It stores exact pricing evidence so a buyer can compare the offers and check their contract. The app uses DeepSpace Auth, Records and server actions, Firecrawl v2 for fresh snapshots, OpenAI for pricing facts, DeepSpace email for transaction alerts, and Exa for related public context.
-
-1. Sign in as the demo owner and set up Alder Desk Pro at 10 seats, USD, monthly on the controlled pricing page.
-2. With the page on baseline, capture and confirm $29 per seat. Advance the hosted pricing variant to increased.
-3. Check now. The report shows $290 to $390, +$100 per month, both dated excerpts and the source URL.
-4. Refresh the report to see email provider acceptance and Exa context. Verify inbox receipt independently.
-5. Repeat the check with the page still at $39. The result should be unchanged. The cosmetic, failed and annual variants can then be tested in that order.
-6. To stage a fresh walkthrough, restore the baseline variant and create a fresh watch before advancing the page again. Leave email disabled until another test send is authorized.
-
-The live walkthrough verified the cost change, both excerpts, saved history, one inbox receipt and an unchanged repeat without another send in the billing ledger. Exa search settled for that report. Separate live testing returned Atlassian pricing links. The owner verified formatting-only, failed-scrape, and annual-billing checks with no additional email. The public page was reset to the $29 baseline with email disabled after the walkthrough.
-
-
-
-## Expanded backend and joint live setup
-
-The expanded backend and initial signed-in UI are implemented locally. Watch settings expose contracts, reminders, schedules and alert rules. The dashboard adds portfolio and comparison views. Reports show saved alert decisions, contract gaps, and packaging evidence. The existing controlled demo still uses Firecrawl. For real vendor pages, deploy services/pricing-egress.mjs as a separate Node process behind TLS. It binds loopback by default and accepts POST /capture with a shared secret. Its parser supports server-rendered HTML and text. Pages requiring JavaScript, region selection, or ambiguous pricing layouts may require review. This path does not supply Firecrawl screenshots.
-
-- Configure the same strong CHANGELENS_EGRESS_TOKEN in the service environment and as a DeepSpace secret. Configure CHANGELENS_VENDOR_EGRESS_URL to the trusted HTTPS service origin. The service validates DNS and pins the connection on every redirect.
-- Configure CHANGELENS_ACCOUNT_DAILY_LIMIT and CHANGELENS_APP_DAILY_LIMIT before enabling vendor captures or scheduling. These are UTC-day reservations, not dollar balances. One reservation covers one bounded capture and its optional model, context, and email follow-ups, or one reminder or retry. The limits default to disabled.
-- Enable CHANGELENS_ENABLE_SCHEDULES only after agreeing the test limits. A watch Durable Object alarms for due slots and renewal reminders. Watch checks serialize against manual actions. A slot is advanced before provider work, so interruption can leave a saved pending skip but cannot replay the slot. Reminder sends use the verified account address captured when the buyer enabled the reminder. Paid email remains disabled in current production settings.
-- Test the egress service separately with node --test services/pricing-egress.test.mjs. The offline Worker suite exercises the action flow, the budget, and a real Durable Object alarm against a mock email provider.
-
-
+- **DeepSpace.** Use your own app registration and deployment settings if you fork the project. Configure the demo URL and capture settings in `wrangler.toml`. Direct Firecrawl mode can use keyless access or a server-side `FIRECRAWL_API_KEY`.
+- **Vendor capture.** Run [services/pricing-egress.mjs](services/pricing-egress.mjs) behind HTTPS. Set `CHANGELENS_VENDOR_EGRESS_URL` to its origin and configure matching `CHANGELENS_EGRESS_TOKEN` values in the service environment and DeepSpace secrets. The public testing release used temporary Vercel hosting for this service.
+- **Scheduled work and email.** Deployment flags control scheduled checks, price-change emails, renewal reminders, and Exa. Deployments can also set account and app-wide daily provider-work limits or explicitly enable uncapped mode. Provider limits and billing still apply. Email is addressed to the verified account.
