@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ActionTools } from 'deepspace/worker'
-import { sendAlert, searchContext } from './followups'
+import { cleanContext, sendAlert, searchContext } from './followups'
 import { uiFixtures } from './fixtures'
 
 const watch = uiFixtures.changed
@@ -22,6 +22,15 @@ describe('report follow-ups', () => {
     })
   })
 
+  it('drops blank titles and excludes the monitored page from context', async () => {
+    const url = 'https://vendor.example/pricing'
+    expect(await searchContext(mockTools(vi.fn().mockResolvedValue({ success: true, data: { results: [
+      { title: ' ', url: 'https://vendor.example/blog', publishedDate: null, text: 'Alder Desk pricing change' },
+      { title: 'Alder Desk pricing change', url, publishedDate: null },
+    ] } })), { ...watch, url })).toEqual({ state: 'empty' })
+    expect(cleanContext({ state: 'found', sources: [{ title: ' ', url, publishedAt: null }] })).toEqual({ state: 'empty' })
+  })
+
   it('distinguishes empty results from search failures', async () => {
     const integration = vi.fn()
       .mockResolvedValueOnce({ success: true, data: { results: [] } })
@@ -41,3 +50,4 @@ describe('report follow-ups', () => {
     expect(await send()).toEqual({ state: 'unknown' })
   })
 })
+

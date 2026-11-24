@@ -29,6 +29,12 @@ export async function sendAlert(tools: ActionTools, watch: Watch, impact: Impact
   return { state: 'unknown' }
 }
 
+export function cleanContext(context: Context): Context {
+  if (context.state !== 'found') return context
+  const sources = context.sources.filter(source => source.title.trim() !== '')
+  return sources.length ? { state: 'found', sources } : { state: 'empty' }
+}
+
 const results = z.object({ results: z.array(z.object({
   title: z.string(),
   url: z.url({ protocol: /^https?$/ }),
@@ -46,12 +52,14 @@ export async function searchContext(tools: ActionTools, watch: Watch): Promise<C
     if (!parsed.success) return { state: 'failed' }
     const vendor = watch.vendor.toLowerCase()
     const sources = parsed.data.results.filter(item => {
+      if (!item.title.trim() || item.url === watch.url) return false
       const copy = (item.title + ' ' + (item.text ?? '')).toLowerCase()
       return copy.includes(vendor) && /\bpric(?:e|es|ing)\b.{0,90}\b(?:increas\w*|decreas\w*|chang\w*|updat\w*|revis\w*)\b|\b(?:increas\w*|decreas\w*|chang\w*|updat\w*|revis\w*)\b.{0,90}\bpric(?:e|es|ing)\b/.test(copy)
-    }).slice(0, 3).map(item => ({ title: item.title, url: item.url, publishedAt: item.publishedDate }))
+    }).slice(0, 3).map(item => ({ title: item.title.trim(), url: item.url, publishedAt: item.publishedDate }))
     return sources.length ? { state: 'found', sources } : { state: 'empty' }
   } catch {
     return { state: 'failed' }
   }
 }
+
 

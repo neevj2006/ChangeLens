@@ -5,7 +5,7 @@ import type { Check, Evidence, Watch, WatchInput } from '../../changelens/contra
 
 const initial: WatchInput = { vendor: '', url: '', plan: '', seats: 10, currency: 'USD', cadence: 'month' }
 const button = 'rounded-md border border-border px-3 py-2 font-medium hover:bg-muted disabled:opacity-50'
-const primary = 'rounded-md bg-primary px-3 py-2 font-medium text-primary-foreground disabled:opacity-50'
+const primary = 'rounded-md bg-slate-800 px-3 py-2 font-medium text-white disabled:opacity-50'
 const field = 'block w-full rounded-md border border-border bg-background px-3 py-2'
 const card = 'min-w-0 space-y-3 rounded-xl border border-border bg-card p-4'
 const outcome: Record<Check['outcome'], string> = {
@@ -187,7 +187,7 @@ function EvidenceCard({ heading, evidence }: { heading: string; evidence: Eviden
   return <section className={card}>
     <h3 className="font-semibold">{heading}</h3>
     <p>{evidence.plan} · {money(evidence.priceMinor, evidence.currency)} per seat per {evidence.cadence}</p>
-    <blockquote className="whitespace-pre-wrap break-words border-l-2 border-border pl-3">{evidence.excerpt}</blockquote>
+    <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere] border-l-2 border-border pl-3">{evidence.excerpt}</blockquote>
     <p className="text-sm"><a className="underline" href={evidence.sourceUrl} target="_blank" rel="noreferrer">Pricing source</a> · {date(evidence.capturedAt)}</p>
   </section>
 }
@@ -213,7 +213,8 @@ function Report({ check, refresh, busy }: { check: Check; refresh: () => Promise
         {source.publishedAt && ' · ' + date(source.publishedAt)}
       </li>)}</ul>}
     </> : check.evidence && <EvidenceCard heading="Pricing evidence" evidence={check.evidence} />}
-    {check.snapshot && <details><summary>Captured page text</summary><pre className="whitespace-pre-wrap break-words">{check.snapshot.markdown}</pre></details>}
+    {check.snapshot && <details><summary>Captured page text</summary><pre className="whitespace-pre-wrap [overflow-wrap:anywhere]">{check.snapshot.markdown}</pre></details>}
     <button className={button} disabled={busy} onClick={() => void refresh()}>Refresh report</button>
   </section>
 }
+

@@ -1,4 +1,4 @@
-import { sendAlert, searchContext } from '../changelens/followups'
+import { cleanContext, sendAlert, searchContext } from '../changelens/followups'
 import { z } from 'zod'
 import { RECORD_NOT_FOUND } from 'deepspace/worker'
 import type { ActionContext, ActionHandler } from 'deepspace/worker'
@@ -25,7 +25,9 @@ async function load(ctx: Ctx, id: string) {
   const state = record.data.state as Saved
   const staleBefore = Date.now() - 60_000
   for (const check of [...state.checks, state.watch.latest]) {
-    if (!check || Date.parse(check.checkedAt) > staleBefore) continue
+    if (!check) continue
+    check.context = cleanContext(check.context)
+    if (Date.parse(check.checkedAt) > staleBefore) continue
     if (check.alert.state === 'pending' && (state.alertAttempts?.[check.id] ?? 0) <= staleBefore) check.alert = { state: 'unknown' }
     if (check.context.state === 'pending') check.context = { state: 'failed' }
   }
@@ -299,6 +301,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return success(snapshot ? { ...check, snapshot: { id: snapshot.id, markdown: snapshot.source } } : check)
   },
 }
+
 
 
 

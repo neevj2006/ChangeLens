@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare'
 import { exportSPKI, generateKeyPair, SignJWT } from 'jose'
@@ -20,6 +21,7 @@ let annual = false
 let scrapeFails = false
 let deliveryUnknown = false
 let deliveryRejected = false
+let incompleteModel = false
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1',
   modules: true,
@@ -83,6 +85,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
         data = { markdown: '# Alder Desk\n\n## Pro\n\n' + (cosmetic ? '**' + price + '**' : price), metadata: { sourceURL: body.url, statusCode: 200 } }
       } else if (endpoint === 'chat-completion') {
         assert.equal(body.model, 'gpt-4.1-mini')
+        if (incompleteModel) return Response.json({ success: true, data: { choices: [] } })
         const source = JSON.parse(body.messages[1].content).source
         data = { choices: [{ finish_reason: 'stop', message: { content: String.fromCharCode(96).repeat(3) + 'json\n' + JSON.stringify({
           plan: 'Pro', currency: 'USD', cadence: 'month', unit: 'seat',
@@ -190,8 +193,14 @@ try {
   assert.equal(calls.filter(call => call.endpoint === 'send').at(-1).body.to, 'owner@example.test')
   assert.equal((await post('retryAlert', { ...key(), checkId: decreaseId })).code, 'retry_unavailable')
   deliveryUnknown = false
-  deliveryRejected = true
   amount = 38
+  incompleteModel = true
+  watch = await ok('checkWatch', key())
+  assert.equal(watch.latest.outcome, 'failed')
+  assert.match(watch.latest.message, /extraction did not complete/)
+  assert.equal(calls.filter(call => call.endpoint === 'send').length, 2)
+  incompleteModel = false
+  deliveryRejected = true
   watch = await ok('checkWatch', key())
   const rejectedId = watch.latest.id
   // A serial action waits for the saved delivery result before using the revision.
@@ -238,7 +247,19 @@ try {
       } }))
       await page.route('**/api/auth/token', route => route.fulfill({ json: { token: ownerToken } }))
       await page.goto(home)
-      await page.getByRole('button', { name: 'Add watch', exact: true }).click()
+      const add = page.getByRole('button', { name: 'Add watch', exact: true })
+      await add.waitFor()
+      await add.focus()
+      await page.keyboard.press('Enter')
+      await page.keyboard.press('Tab')
+      assert.equal(await page.getByLabel('Vendor', { exact: true }).evaluate(el => el === document.activeElement), true)
+      const audit = async () => {
+        await page.addScriptTag({ path: createRequire(import.meta.url).resolve('axe-core/axe.min.js') })
+        const failures = await page.evaluate(async () => (await window.axe.run()).violations.map(rule =>
+          ({ id: rule.id, nodes: rule.nodes.map(node => node.target) })))
+        assert.deepEqual(failures, [])
+      }
+      await audit()
       await page.getByLabel('Vendor', { exact: true }).fill('Alder Desk')
       await page.getByLabel('Pricing URL').fill(pricingUrl)
       await page.getByLabel('Plan', { exact: true }).fill('Pro')
@@ -259,8 +280,19 @@ try {
       await page.reload()
       await page.getByRole('button', { name: /Alder Desk · Pro.*Price changed/ }).click()
       await page.getByText('+$100.00/month for 10 seats', { exact: true }).waitFor()
+      await page.route('**/api/actions/getCheck', async route => {
+        const response = await route.fetch()
+        const body = await response.json()
+        body.data.impact.current.excerpt += '\n' + 'x'.repeat(500)
+        body.data.snapshot.markdown += '\n' + 'y'.repeat(500)
+        await route.fulfill({ response, json: body })
+      })
+      await page.getByRole('button', { name: 'Refresh report' }).click()
+      await page.getByText('Captured page text').click()
       await page.setViewportSize({ width: 390, height: 844 })
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+      await audit()
+      console.log('Axe, keyboard focus, and mobile checks passed.')
       console.log('Browser signed-out, setup, baseline, report, history reload and mobile width passed.')
     } finally {
       await browser.close()
@@ -270,6 +302,9 @@ try {
 } finally {
   await runtime.dispose()
 }
+
+
+
 
 
 
