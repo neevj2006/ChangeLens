@@ -12,7 +12,7 @@ import { calculateImpact, cosmeticForm, normalize, planRegion, verifyEvidence, w
 const collection = 'changeLensWatches'
 type Ctx = ActionContext<Env> & {
   verifiedEmail?: string
-  reserve?: () => Promise<boolean>
+  reserve?: (kind?: 'reminder' | 'scheduled') => Promise<boolean>
   queue?: (id: string, at: number | null, onlyEarlier?: boolean) => Promise<void>
   defer?: (task: () => Promise<unknown>) => void
   screenshots?: {
@@ -147,7 +147,7 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
   if (!baseline && (watch.status !== 'armed' || !state.comparable)) {
     return failure('not_armed', 'Confirm the baseline and resume the watch before checking.')
   }
-  if (!demo && !budgetReserved && !await ctx.reserve?.()) {
+  if ((!demo || ctx.env.CHANGELENS_TEST_UNTIL) && !budgetReserved && !await ctx.reserve?.()) {
     return failure('budget_limit', 'The capture budget is exhausted or disabled.')
   }
   const check: Check = {
@@ -336,6 +336,12 @@ export async function runScheduled(ctx: Ctx, id: string, now = Date.now()) {
     return
   }
   const { watch } = state
+  if (ctx.env.CHANGELENS_TEST_UNTIL &&
+      (Date.parse(ctx.env.CHANGELENS_TEST_UNTIL) <= now || ctx.userId !== ctx.env.OWNER_USER_ID ||
+        watch.vendor !== ctx.env.CHANGELENS_TEST_WATCH)) {
+    await ctx.queue?.(id, null)
+    return
+  }
   const terms = watch.contract
   const timing = terms && reminderTiming(terms)
   if (terms && timing && state.reminderRecipient && !watch.reminder && timing.due <= now) {
@@ -346,7 +352,8 @@ export async function runScheduled(ctx: Ctx, id: string, now = Date.now()) {
       watch.reminder = state.reminders[terms.noticeDate] = { state: 'expired', at: new Date(now).toISOString() }
       watch.revision++
       await save(ctx, state)
-    } else if (ctx.env.CHANGELENS_ENABLE_EMAIL !== 'true' || !await ctx.reserve?.()) {
+    } else if ((ctx.env.CHANGELENS_ENABLE_REMINDER_EMAIL ?? ctx.env.CHANGELENS_ENABLE_EMAIL) !== 'true' ||
+        !await ctx.reserve?.('reminder')) {
       // Leave the reminder eligible and defer the next attempt without calling email.
       if (!watch.monitoring?.nextAt || Date.parse(watch.monitoring.nextAt) > now) {
         await ctx.queue?.(id, Math.min(now + 60 * 60_000, timing.cutoff))
@@ -380,9 +387,10 @@ export async function runScheduled(ctx: Ctx, id: string, now = Date.now()) {
   }
   watch.revision++
   monitoring.nextAt = afterScheduledSlot(schedule, monitoring.nextAt, now)
+  if (ctx.env.CHANGELENS_TEST_UNTIL) monitoring.nextAt = null
   const at = new Date(now).toISOString()
   // Persist advancement before using credits. A replay can never spend twice on this slot.
-  if (!await ctx.reserve?.()) {
+  if (!await ctx.reserve?.('scheduled')) {
     monitoring.lastSkip = { at, reason: 'Scheduled credit limit reached or disabled.' }
     await save(ctx, state)
     return
@@ -414,14 +422,17 @@ const comparisonInput = z.object({
   features: z.array(z.string().trim().min(1).max(100)).max(20),
 })
 export const actions: Record<string, ActionHandler<Env>> = {
-  async getCapabilities({ env }) {
+  async getCapabilities({ env, userId }) {
     const account = Number(env.CHANGELENS_ACCOUNT_DAILY_LIMIT)
     const app = Number(env.CHANGELENS_APP_DAILY_LIMIT)
     const budget = Number.isSafeInteger(account) && Number.isSafeInteger(app) && account >= 1 && account <= app && app <= 1_000
+    const testAllowed = !env.CHANGELENS_TEST_UNTIL ||
+      (userId === env.OWNER_USER_ID && Date.parse(env.CHANGELENS_TEST_UNTIL) > Date.now())
     return success({
-      vendorCapture: budget && !!env.CHANGELENS_VENDOR_EGRESS_URL && !!env.CHANGELENS_EGRESS_TOKEN,
-      scheduledChecks: budget && env.CHANGELENS_ENABLE_SCHEDULES === 'true',
+      vendorCapture: testAllowed && budget && !!env.CHANGELENS_VENDOR_EGRESS_URL && !!env.CHANGELENS_EGRESS_TOKEN,
+      scheduledChecks: testAllowed && budget && env.CHANGELENS_ENABLE_SCHEDULES === 'true',
       email: env.CHANGELENS_ENABLE_EMAIL === 'true',
+      reminders: testAllowed && (env.CHANGELENS_ENABLE_REMINDER_EMAIL ?? env.CHANGELENS_ENABLE_EMAIL) === 'true',
     })
   },
   async createWatch(ctx) {
@@ -510,6 +521,11 @@ export const actions: Record<string, ActionHandler<Env>> = {
       consecutiveFailures: watch.monitoring?.consecutiveFailures ?? 0,
       lastSuccessAt: watch.monitoring?.lastSuccessAt ?? null,
       nextAt: input.data && watch.status === 'armed' ? nextCheck(input.data, Date.now()) : null,
+    }
+    if (input.data && watch.status === 'armed' && ctx.env.CHANGELENS_TEST_UNTIL &&
+        Date.parse(ctx.env.CHANGELENS_TEST_UNTIL) > Date.now() && ctx.userId === ctx.env.OWNER_USER_ID &&
+        watch.vendor === ctx.env.CHANGELENS_TEST_WATCH) {
+      watch.monitoring.nextAt = new Date(Date.now() + 90_000).toISOString()
     }
     return save(ctx, state)
   }),

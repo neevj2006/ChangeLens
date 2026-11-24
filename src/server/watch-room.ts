@@ -34,10 +34,10 @@ export class WatchRoom {
           if (keys.length) await this.state.storage.delete(keys)
         },
       },
-      reserve: async () => {
+      reserve: async (kind?: 'reminder' | 'scheduled') => {
         const rooms = this.env.WATCH_ROOMS
         const room = rooms.get(rooms.idFromName('changelens:provider-budget'))
-        const response = await room.fetch('https://internal/budget', { method: 'POST', body: userId })
+        const response = await room.fetch('https://internal/budget', { method: 'POST', body: JSON.stringify({ userId, kind }) })
         return response.status === 204
       },
       queue: async (id: string, at: number | null, onlyEarlier = false) => {
@@ -84,7 +84,11 @@ export class WatchRoom {
     })
   }
 
-  private async reserveBudget(userId: string) {
+  private async reserveBudget({ userId, kind }: { userId: string; kind?: 'reminder' | 'scheduled' }) {
+    const testUntil = this.env.CHANGELENS_TEST_UNTIL
+    if (testUntil && (!(Date.parse(testUntil) > Date.now()) || userId !== this.env.OWNER_USER_ID)) {
+      return new Response(null, { status: 429 })
+    }
     if (!userId || userId.length > 200) return new Response(null, { status: 400 })
     const accountLimit = Number(this.env.CHANGELENS_ACCOUNT_DAILY_LIMIT)
     const appLimit = Number(this.env.CHANGELENS_APP_DAILY_LIMIT)
@@ -92,13 +96,15 @@ export class WatchRoom {
         accountLimit < 1 || appLimit < 1 || appLimit > 1_000 || accountLimit > appLimit) {
       return new Response(null, { status: 429 })
     }
-    const day = Math.floor(Date.now() / dayMs)
+    const day = testUntil ?? Math.floor(Date.now() / dayMs)
     const allowed = await this.state.storage.transaction(async tx => {
-      const previous = await tx.get<{ day: number; total: number; byUser: Record<string, number> }>('budget')
+      const previous = await tx.get<{ day: number | string; total: number; reminder?: boolean; scheduled?: boolean; byUser: Record<string, number> }>('budget')
       const budget = previous?.day === day ? previous : { day, total: 0, byUser: {} }
       const key = 'account:' + userId
       const used = budget.byUser[key] ?? 0
-      if (budget.total >= appLimit || used >= accountLimit) return false
+      if (budget.total >= appLimit || used >= accountLimit ||
+          (testUntil && kind && budget[kind])) return false
+      if (testUntil && kind) budget[kind] = true
       budget.total++
       budget.byUser[key] = used + 1
       await tx.put('budget', budget)
@@ -109,7 +115,7 @@ export class WatchRoom {
 
   async fetch(request: Request) {
     const path = new URL(request.url).pathname
-    if (path === '/budget') return this.reserveBudget(await request.text())
+    if (path === '/budget') return this.reserveBudget(await request.json())
     if (path !== '/action') return new Response(null, { status: 404 })
     const payload = await request.json<OwnerRequest>()
     const { name } = payload

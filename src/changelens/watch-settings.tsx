@@ -41,7 +41,7 @@ export function WatchSettings({ watch, busy, save, capabilities }: {
     <h2 className="text-lg font-semibold">Watch settings</h2>
     <details>
       <summary className="cursor-pointer font-medium">Contract and renewal</summary>
-      {capabilities && (!capabilities.scheduledChecks || !capabilities.email) &&
+      {capabilities && (!capabilities.scheduledChecks || !capabilities.reminders) &&
         <p className="mt-3">Reminder emails are paused on this deployment.</p>}
       <form key={'contract-' + watch.revision} className="mt-3 space-y-3" onSubmit={event => {
         const values = formData(event)

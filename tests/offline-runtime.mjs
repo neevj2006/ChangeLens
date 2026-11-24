@@ -146,7 +146,7 @@ async function ok(name, body) {
 
 try {
   assert.equal((await post('listWatches', {}, 'invalid')).error, 'Unauthorized')
-  assert.deepEqual(await ok('getCapabilities'), { vendorCapture: true, scheduledChecks: true, email: true })
+  assert.deepEqual(await ok('getCapabilities'), { vendorCapture: true, scheduledChecks: true, email: true, reminders: true })
   assert.deepEqual(await ok('listWatches'), [])
   const input = { vendor: 'Alder Desk', url: pricingUrl, plan: 'Pro', currency: 'USD', cadence: 'month', seats: 10 }
   assert.equal((await post('createWatch', { ...input, seats: 0 })).code, 'invalid_input')
@@ -267,7 +267,7 @@ try {
   await ok('removeWatch', key())
   assert.equal((await post('getScreenshot', { id: watch.id, snapshotId: changed.impact.current.snapshotId })).code, 'not_found')
   screenshotMode = 'available'
-  assert.deepEqual(await ok('getCapabilities'), { vendorCapture: true, scheduledChecks: true, email: true })
+  assert.deepEqual(await ok('getCapabilities'), { vendorCapture: true, scheduledChecks: true, email: true, reminders: true })
   assert.deepEqual(await ok('listWatches'), [])
 
   const vendorInput = { ...input, url: 'https://vendor.example.org/pricing' }

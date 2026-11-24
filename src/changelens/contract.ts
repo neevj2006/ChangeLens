@@ -111,7 +111,7 @@ export type Portfolio = {
 }
 export type Result<T> = { success: true; data: T } | { success: false; code: string; error: string }
 type WatchVersion = { id: string; revision: number }
-export type Capabilities = { vendorCapture: boolean; scheduledChecks: boolean; email: boolean }
+export type Capabilities = { vendorCapture: boolean; scheduledChecks: boolean; email: boolean; reminders: boolean }
 export type ChangeLensActions = {
   getCapabilities: [Record<string, never>, Capabilities]
   createWatch: [WatchInput, Watch]
