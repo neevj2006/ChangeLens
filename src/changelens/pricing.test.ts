@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { demoMarkdown } from './fixtures'
-import { cosmeticForm, verifyEvidence, watchInput } from './pricing'
+import { cosmeticForm, verifyEvidence, verifyMonthlyAlternative, watchInput } from './pricing'
 import type { WatchInput } from './contract'
 
 const watch: WatchInput = {
@@ -50,6 +50,17 @@ describe('pricing evidence', () => {
     expect(cosmeticForm(demoMarkdown.baseline)).not.toEqual(cosmeticForm(demoMarkdown.increased))
   })
 
+  it('verifies a named monthly alternative without using the annual equivalent', () => {
+    const line = 'Starter is free for 2 users (new customers only). Team is US$39.90 per user per month billed annually, or US$49.90 monthly. Growth is US$59.90 annually, or US$74.90 monthly.'
+    const input = { ...watch, plan: 'Team' }
+    const price = verifyMonthlyAlternative(line, input)
+    expect(price?.priceMinor).toBe(4990)
+    expect(price && line.includes(price.excerpt)).toBe(true)
+    expect(verifyMonthlyAlternative(line, { ...input, cadence: 'year' })).toBeNull()
+    expect(verifyMonthlyAlternative(line, { ...input, plan: 'Growth' })).toBeNull()
+    expect(verifyMonthlyAlternative(line + '\n' + line.replace('49.90', '55.90'), input)).toBeNull()
+  })
+
   it('rejects local targets, credentials, non-HTTP and invalid seat counts', () => {
     for (const url of ['http://127.0.0.1/', 'http://[::1]/', 'http://localhost/', 'https://host.internal/',
       'https://user@alderdesk.com/', 'file:///pricing', 'https://alderdesk.com:8080/pricing']) {
@@ -59,4 +70,3 @@ describe('pricing evidence', () => {
     expect(watchInput.safeParse(watch).success).toBe(true)
   })
 })
-

@@ -36,6 +36,8 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   compatibilityFlags: config.compatibility_flags,
   bindings: {
     ...config.vars,
+    CHANGELENS_UNCAPPED: 'false',
+    CHANGELENS_PUBLIC_CAPTURE: 'false',
     CHANGELENS_DEMO_VARIANT: 'baseline',
     OWNER_USER_ID: owner, APP_OWNER_JWT: 'mock-billing',
     AUTH_JWT_PUBLIC_KEY: await exportSPKI(publicKey), AUTH_JWT_ISSUER: issuer,

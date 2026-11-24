@@ -92,6 +92,24 @@ export function verifyEvidence(source: string, proposed: unknown, watch: WatchIn
     ? facts : null
 }
 
+/** A named offer can state its monthly-billed rate as an alternative to an annual equivalent. */
+export function verifyMonthlyAlternative(source: string, watch: WatchInput) {
+  if (watch.currency !== 'USD' || watch.cadence !== 'month') return null
+  const name = watch.plan.replace(/[.*+?^${}()|[\]\\]/g, '\$&')
+  const pattern = new RegExp(
+    '(?:^|[.!?]\\s+)(' + name +
+    ' is US\\$\\d{1,7}(?:\\.\\d{2})? per user per month billed annually, or US\\$(\\d{1,7})(?:\\.(\\d{2}))? monthly)\\.(?=\\s|$)',
+    'gim',
+  )
+  const matches = [...source.matchAll(pattern)]
+  if (matches.length !== 1) return null
+  const [, excerpt, whole, fraction] = matches[0]
+  const parsed = extractedPrice.safeParse({
+    plan: watch.plan, currency: 'USD', cadence: 'month', unit: 'seat',
+    priceMinor: Number(whole) * 100 + Number(fraction ?? 0), excerpt: excerpt + '.',
+  })
+  return parsed.success ? parsed.data : null
+}
 export function calculateImpact(old: Evidence, current: Evidence, seats: number): Impact {
   const totals = totalsAtSeats(old.priceMinor, current.priceMinor, seats)
   return {
