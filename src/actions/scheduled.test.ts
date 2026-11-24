@@ -48,13 +48,14 @@ describe('scheduled backend work', () => {
     const fixture = setup(watch)
     const fetcher = vi.fn()
       .mockRejectedValueOnce(new Error('egress timeout'))
+      .mockRejectedValueOnce(new Error('egress timeout'))
       .mockResolvedValueOnce(Response.json({ url, markdown: demoMarkdown.baseline }))
     vi.stubGlobal('fetch', fetcher)
     await runScheduled(fixture.ctx, watch.id, now)
     expect(fixture.state().watch.monitoring?.consecutiveFailures).toBe(1)
     expect(fixture.state().watch.latest?.outcome).toBe('failed')
     await runScheduled(fixture.ctx, watch.id, now)
-    expect(fetcher).toHaveBeenCalledTimes(1)
+    expect(fetcher).toHaveBeenCalledTimes(2)
 
     const excerpt = '## Pro\n\nUSD $29 per seat per month'
     fixture.integration.mockResolvedValueOnce({ success: true, data: { choices: [{
@@ -68,7 +69,7 @@ describe('scheduled backend work', () => {
     expect(fixture.state().watch.monitoring).toMatchObject({
       consecutiveFailures: 0, lastSuccessAt: '2027-01-02T15:00:00.000Z',
     })
-    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(fetcher).toHaveBeenCalledTimes(3)
   })
 
   it('continues scheduled checks after the rolling history fills', async () => {

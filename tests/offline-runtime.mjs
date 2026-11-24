@@ -28,6 +28,7 @@ let incompleteModel = false
 let vendorMinimum = 5
 let vendorUnsupported = false
 let vendorOversized = false
+let vendorTemporaryFailure = false
 const runtime = new Miniflare(convertV4MiniflareOptions({
   host: '127.0.0.1',
   modules: true,
@@ -55,6 +56,10 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     if (request.url === 'https://egress.example.org/capture') {
       assert.equal(request.headers.get('authorization'), 'Bearer offline-egress')
       const { url } = await request.json()
+      if (vendorTemporaryFailure) {
+        vendorTemporaryFailure = false
+        return new Response(null, { status: 503 })
+      }
       if (vendorOversized) return Response.json({ code: 'unsupported_page' }, { status: 415 })
       assert.match(url, /^https:\/\/[a-z]+\.example\.org\/pricing$/)
       const price = vendorUnsupported ? 'Contact sales' : 'USD $' + amount + ' per seat per month'
@@ -172,6 +177,8 @@ try {
   assert.equal((await post('confirmBaseline', { ...key(), snapshotId: 'wrong' })).code, 'stale_candidate')
   const confirmation = { ...key(), snapshotId: watch.candidate.snapshotId }
   watch = await ok('confirmBaseline', confirmation)
+  assert.equal(watch.latest.message, 'The baseline is confirmed.')
+  assert.equal((await ok('getCheck', { id: watch.id, checkId: confirmation.snapshotId })).message, watch.latest.message)
   assert.equal((await post('confirmBaseline', confirmation)).code, 'stale_revision')
   assert.equal((await ok('getWatch', key())).baseline.priceMinor, 2900)
 
@@ -286,6 +293,7 @@ try {
   const alternativeInput = { ...input, vendor: 'Another vendor', url: 'https://another.example.org/pricing' }
   let vendorWatch = await ok('createWatch', vendorInput)
   const v = () => ({ id: vendorWatch.id, revision: vendorWatch.revision })
+  vendorTemporaryFailure = true
   vendorWatch = await ok('captureBaseline', v())
   assert.equal(vendorWatch.candidate.seatMinimum.seats, 5)
   vendorWatch = await ok('confirmBaseline', { ...v(), snapshotId: vendorWatch.candidate.snapshotId })

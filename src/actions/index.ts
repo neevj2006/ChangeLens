@@ -31,6 +31,7 @@ const notFound = () => failure('not_found', 'Watch or check not found.')
 const invalid = () => failure('invalid_input', 'Check the supplied watch settings.')
 const idInput = z.object({ id: z.uuid() })
 const version = idInput.extend({ revision: z.number().int().positive() })
+const confirmedBaselineMessage = 'The baseline is confirmed.'
 
 async function load(ctx: Ctx, id: string) {
   const result = await ctx.tools.get(collection, id)
@@ -42,6 +43,11 @@ async function load(ctx: Ctx, id: string) {
   const staleBefore = Date.now() - 60_000
   for (const check of [...state.checks, state.watch.latest]) {
     if (!check) continue
+    if (check.outcome === 'baseline_ready' && check.evidence?.snapshotId !== state.watch.candidate?.snapshotId) {
+      check.message = check.evidence?.snapshotId === state.watch.baseline?.snapshotId
+        ? confirmedBaselineMessage
+        : 'Pricing evidence was captured for a baseline.'
+    }
     check.context = cleanContext(check.context)
     if (Date.parse(check.checkedAt) > staleBefore) continue
     if (check.alert.state === 'pending' && (state.alertAttempts?.[check.id] ?? 0) <= staleBefore) check.alert = { state: 'unknown' }
@@ -122,16 +128,30 @@ async function scrapeDirect(url: string, key?: string, screenshot = true) {
   return z.object({ success: z.literal(true), data: z.unknown() }).parse(await response.json())
 }
 class UnsupportedVendorPage extends Error {}
+class VendorCaptureError extends Error {}
 async function vendorSnapshot(env: Env, url: string) {
   const origin = new URL(env.CHANGELENS_VENDOR_EGRESS_URL!)
   if (origin.protocol !== 'https:' || origin.username || origin.password || origin.port) throw new Error('Invalid egress configuration.')
-  const response = await fetch(new URL('/capture', origin), {
-    method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(15_000),
+  const request = (signal: AbortSignal) => fetch(new URL('/capture', origin), {
+    method: 'POST', redirect: 'manual', signal,
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.CHANGELENS_EGRESS_TOKEN },
     body: JSON.stringify({ url }),
   })
+  const deadline = AbortSignal.timeout(15_000)
+  let response = await request(deadline).catch(() => null)
+  if ((!response || [502, 503, 504].includes(response.status)) && !deadline.aborted) {
+    await response?.body?.cancel().catch(() => undefined)
+    response = await request(deadline).catch(() => null)
+  }
+  if (!response) throw new VendorCaptureError('The pricing capture service did not respond. Try again shortly.')
   if (response.status === 415) throw new UnsupportedVendorPage()
-  if (!response.ok) throw new Error('Vendor page unavailable.')
+  if (!response.ok) {
+    console.warn('[changelens] Vendor capture HTTP ' + response.status)
+    await response.body?.cancel().catch(() => undefined)
+    throw new VendorCaptureError(response.status === 422
+      ? 'The capture service could not retrieve this pricing page. Check that the URL opens publicly and try again.'
+      : 'The pricing capture service returned an error. Try again shortly.')
+  }
   return z.object({ markdown: scrapeResult.shape.markdown, url: watchInput.shape.url })
     .parse(JSON.parse(await readBoundedBodyText(response, 200_000)))
 }
@@ -228,6 +248,8 @@ async function capture(ctx: Ctx, state: Saved, baseline: boolean, budgetReserved
     if (error instanceof UnsupportedVendorPage) {
       check.outcome = 'needs_review'
       check.message = 'This pricing page exceeds the supported capture size or uses an unsupported format.'
+    } else if (error instanceof VendorCaptureError) {
+      check.message = error.message
     }
     return finish()
   }
@@ -511,6 +533,11 @@ export const actions: Record<string, ActionHandler<Env>> = {
       return failure('stale_candidate', 'Capture a new baseline before confirming.')
     }
     watch.baseline = state.comparable = watch.candidate
+    for (const check of [...state.checks, watch.latest]) {
+      if (check?.outcome === 'baseline_ready' && check.evidence?.snapshotId === watch.baseline.snapshotId) {
+        check.message = confirmedBaselineMessage
+      }
+    }
     state.lastSeatMinimum = watch.candidate.seatMinimum ?? undefined
     watch.candidate = null
     watch.status = 'armed'
