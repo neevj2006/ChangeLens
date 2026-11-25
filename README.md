@@ -35,7 +35,7 @@ The live walkthrough verified both screenshots, the copied summary, the calculat
 
 ## Pricing and capture scope
 
-ChangeLens compares flat per-seat offers when the plan, currency, and billing period match. Base fees combined with optional seats, usage-based pricing, annual-billing equivalents, and regional variants may need separate interpretation or stay unverified. Public listed costs exclude taxes and account-specific contract terms.
+ChangeLens compares flat per-seat offers when the plan, currency, and billing period match. When supported evidence explicitly says a monthly per-seat rate is billed annually, an annual watch uses 12 months at the quoted rate. A monthly watch requires evidence of monthly billing. Base fees combined with optional seats, usage-based pricing, and regional variants may need separate interpretation or stay unverified. Public listed costs exclude taxes and account-specific contract terms.
 
 The controlled page uses Firecrawl v2 and can return screenshots with the pricing text. Real vendor URLs use an authenticated Node fetch service that validates public DNS destinations and pins the connection on each redirect. That service reads server-rendered HTML or text, caps responses at 2 MiB, and does not produce screenshots. Pages that require JavaScript or exceed capture limits may need review. Watch history retains the most recent 30 checks and preserves evidence referenced by the baseline and retained reports.
 
