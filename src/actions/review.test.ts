@@ -18,7 +18,8 @@ describe('AI interpretation on an unverified offer', () => {
       seats: 10, revision: 1, status: 'unarmed', baseline: null, candidate: null, latest: null }
     let state = { watch, checks: [] as Check[], snapshots: [], comparable: null as Evidence | null }
     let amount = 29
-    const excerpt = () => 'Pro membership costs USD $' + amount + ' per billed seat each month.'
+    let billedYearly = true
+    const excerpt = () => billedYearly ? '$10 per user/month' : 'Pro membership costs USD $' + amount + ' per billed seat each month.'
     const integration = vi.fn(async (endpoint: string, args: { max_tokens?: number }) => {
       if (endpoint === 'email/send') return { success: true, data: { id: 'sent' } }
       const content = args.max_tokens !== 220 ? 'null' : JSON.stringify({
@@ -42,8 +43,18 @@ describe('AI interpretation on an unverified offer', () => {
         },
       },
     } as unknown as ActionContext<Env>
-    vi.stubGlobal('fetch', async () => Response.json({ url, markdown: excerpt() }))
+    vi.stubGlobal('fetch', async () => Response.json({
+      url, markdown: billedYearly ? '### Pro\n\n' + excerpt() + '\n\nBilled yearly' : excerpt(),
+    }))
     try {
+      amount = 10
+      await actions.captureBaseline(ctx)
+      expect(state.watch.candidate).toBeNull()
+      expect(state.watch.latest?.outcome).toBe('needs_review')
+      expect(state.watch.latest?.reviewExplanation?.source).toBe('ai')
+      billedYearly = false
+      amount = 29
+      ctx.params = { id, revision: state.watch.revision }
       await actions.captureBaseline(ctx)
       expect(state.watch.candidate?.interpretation).toBe('ai')
       expect(state.watch.latest?.reviewExplanation?.source).toBe('ai')

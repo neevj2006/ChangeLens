@@ -1,6 +1,6 @@
 import type { ActionTools } from 'deepspace/worker'
 import type { Check, WatchInput } from './contract'
-import { extractedPrice } from './pricing'
+import { extractedPrice, hasAnnualBilling } from './pricing'
 
 export function hasPackagingReview(check: Check) {
   return check.packaging?.state === 'needs_review' ||
@@ -31,11 +31,16 @@ export async function explainReview(tools: ActionTools, watch: WatchInput, check
     let answer: { explanation?: unknown; price?: unknown }
     try { answer = JSON.parse(json) ?? {} }
     catch { answer = { explanation: text } }
-    const explanation = typeof answer.explanation === 'string' ? answer.explanation.trim() : ''
     const parsed = extractedPrice.safeParse(answer.price)
+    const annualMonthlyQuote = parsed.success && watch.cadence === 'month' &&
+      capturedText.includes(parsed.data.excerpt) && hasAnnualBilling(capturedText, parsed.data.excerpt)
+    const explanation = annualMonthlyQuote
+      ? 'The quoted per-month rate is billed annually. A monthly-billed rate could not be verified.'
+      : typeof answer.explanation === 'string' ? answer.explanation.trim() : ''
     const quote = parsed.success && check.outcome === 'needs_review' &&
       parsed.data.plan === watch.plan && parsed.data.currency === watch.currency &&
-      parsed.data.cadence === watch.cadence && capturedText.includes(parsed.data.excerpt)
+      parsed.data.cadence === watch.cadence && capturedText.includes(parsed.data.excerpt) &&
+      !annualMonthlyQuote
       ? parsed.data : undefined
     const reviewExplanation = explanation && explanation.length <= 1200 && !/^NO_ANSWER[.!]?$/i.test(explanation)
       ? { source: 'ai' as const, text: explanation } : undefined

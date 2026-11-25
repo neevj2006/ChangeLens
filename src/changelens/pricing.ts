@@ -32,6 +32,18 @@ export const extractedPrice = z.object({
 
 const priceLine = /^(USD|EUR|GBP|CAD|AUD)\s*([$€£])?\s*(\d{1,7})(?:\.(\d{1,2}))?\s*(?:per|\/)\s*(?:seat|user)\s*(?:per|\/)\s*(month|year)$/i
 const symbols = { USD: '$', EUR: '€', GBP: '£', CAD: '$', AUD: '$' }
+const annualBilling = /\b(?:billed\s+(?:yearly|annually|(?:per|each)\s+year)|(?:annual|yearly)\s+(?:billing|commitment)|(?:annual|yearly)\s+(?:price|rate)\s+per\s+(?:seat|user)\s+per\s+month)\b/i
+
+export function hasAnnualBilling(source: string, excerpt: string) {
+  if (annualBilling.test(excerpt)) return true
+  const at = source.indexOf(excerpt)
+  if (at === -1) return false
+  const firstLine = source.lastIndexOf('\n', at - 1) + 1
+  const after = source.slice(at + excerpt.length).split(/\r?\n/)
+  const following = after.slice(1).find(line => line.trim())
+  return annualBilling.test(source.slice(firstLine, at) + excerpt + after[0]) ||
+    !!following && /^\s*[*_> (]*billed\s+/i.test(following) && annualBilling.test(following)
+}
 
 const tableCells = (line: string) => line.trim().slice(1, -1).split('|').map(cell => cell.trim())
 
