@@ -45,6 +45,14 @@ export function hasAnnualBilling(source: string, excerpt: string) {
     !!following && /^\s*[*_> (]*billed\s+/i.test(following) && annualBilling.test(following)
 }
 
+export function annualizedMonthlyRate(source: string, excerpt: string) {
+  if (!hasAnnualBilling(source, excerpt)) return null
+  const matches = [...excerpt.matchAll(/(?:([$€£])\s*|\b(?:USD|EUR|GBP|CAD|AUD)\s+)(\d{1,7})(?:\.(\d{1,2}))?\s*(?:per|\/)\s*(?:seat|user)\s*(?:per|\/)\s*month\b/gi)]
+  if (matches.length !== 1) return null
+  const [, , whole, fraction] = matches[0]
+  return (Number(whole) * 100 + Number((fraction ?? '').padEnd(2, '0'))) * 12
+}
+
 const tableCells = (line: string) => line.trim().slice(1, -1).split('|').map(cell => cell.trim())
 
 function matchesTable(source: string, facts: z.infer<typeof extractedPrice>): boolean {

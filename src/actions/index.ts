@@ -8,7 +8,7 @@ import { readBoundedBodyText, RECORD_NOT_FOUND } from 'deepspace/worker'
 import type { ActionContext, ActionHandler } from 'deepspace/worker'
 import type { Env } from '../../worker'
 import type { Check, Comparison, Evidence, Portfolio, Result, ScreenshotImage, SeatMinimum, Watch } from '../changelens/contract'
-import { calculateImpact, cosmeticForm, hasAnnualBilling, normalize, planRegion, verifyEvidence, verifyMonthlyAlternative, watchInput } from '../changelens/pricing'
+import { annualizedMonthlyRate, calculateImpact, cosmeticForm, hasAnnualBilling, normalize, planRegion, verifyEvidence, verifyMonthlyAlternative, watchInput } from '../changelens/pricing'
 
 const collection = 'changeLensWatches'
 type Ctx = ActionContext<Env> & {
@@ -33,11 +33,15 @@ const idInput = z.object({ id: z.uuid() })
 const version = idInput.extend({ revision: z.number().int().positive() })
 const confirmedBaselineMessage = 'The baseline is confirmed.'
 
-function discardAnnualMonthlyEvidence(state: Saved) {
+function discardInvalidBillingEvidence(state: Saved) {
   const { watch } = state
-  if (watch.cadence !== 'month') return
-  const invalid = (evidence: Evidence | null) => evidence?.interpretation === 'ai' &&
-    hasAnnualBilling(state.snapshots.find(snapshot => snapshot.id === evidence.snapshotId)?.source ?? '', evidence.excerpt)
+  const invalid = (evidence: Evidence | null) => {
+    if (evidence?.interpretation !== 'ai') return false
+    const source = state.snapshots.find(snapshot => snapshot.id === evidence.snapshotId)?.source ?? ''
+    if (watch.cadence === 'month') return hasAnnualBilling(source, evidence.excerpt)
+    const expected = annualizedMonthlyRate(source, evidence.excerpt)
+    return expected !== null && evidence.priceMinor !== expected
+  }
   if (invalid(watch.candidate)) watch.candidate = null
   if (invalid(watch.baseline) || invalid(state.comparable)) {
     watch.baseline = state.comparable = null
@@ -52,7 +56,7 @@ async function load(ctx: Ctx, id: string) {
   const record = result.success ? result.data?.record : undefined
   if (record?.data.ownerId !== ctx.userId) return null
   const state = record.data.state as Saved
-  discardAnnualMonthlyEvidence(state)
+  discardInvalidBillingEvidence(state)
   refreshContractGap(state)
   const staleBefore = Date.now() - 60_000
   for (const check of [...state.checks, state.watch.latest]) {
@@ -464,7 +468,7 @@ async function ownedWatches(ctx: Ctx) {
   if (!result.success) throw new Error('Watches could not be loaded.')
   return (result.data?.records ?? []).filter(row => row.data.ownerId === ctx.userId).map(row => {
     const state = row.data.state as Saved
-    discardAnnualMonthlyEvidence(state)
+    discardInvalidBillingEvidence(state)
     refreshContractGap(state)
     return state
   })
@@ -509,7 +513,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     return success((result.data?.records ?? []).filter(row => row.data.ownerId === ctx.userId)
       .map(row => {
         const state = row.data.state as Saved
-        discardAnnualMonthlyEvidence(state)
+        discardInvalidBillingEvidence(state)
         refreshContractGap(state)
         return state.watch
       }))

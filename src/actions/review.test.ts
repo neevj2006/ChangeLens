@@ -19,12 +19,13 @@ describe('AI interpretation on an unverified offer', () => {
     let state = { watch, checks: [] as Check[], snapshots: [], comparable: null as Evidence | null }
     let amount = 29
     let billedYearly = true
-    const excerpt = () => billedYearly ? '$10 per user/month' : 'Pro membership costs USD $' + amount + ' per billed seat each month.'
+    let cadence: Watch['cadence'] = 'month'
+    const excerpt = () => billedYearly ? '$' + amount + ' per user/month' : 'Pro membership costs USD $' + amount + ' per billed seat each month.'
     const integration = vi.fn(async (endpoint: string, args: { max_tokens?: number }) => {
       if (endpoint === 'email/send') return { success: true, data: { id: 'sent' } }
       const content = args.max_tokens !== 220 ? 'null' : JSON.stringify({
         explanation: 'I found an explicit monthly per-seat offer in the text.',
-        price: { plan: 'Pro', currency: 'USD', cadence: 'month', unit: 'seat', priceMinor: amount * 100, excerpt: excerpt() },
+        price: { plan: 'Pro', currency: 'USD', cadence, unit: 'seat', priceMinor: amount * 100, excerpt: excerpt() },
       })
       return { success: true, data: { choices: [{ finish_reason: 'stop', message: { content } }] } }
     })
@@ -69,6 +70,23 @@ describe('AI interpretation on an unverified offer', () => {
       for (const task of tasks) await task()
       expect(state.watch.latest?.alert.state).toBe('accepted')
       expect(integration).toHaveBeenCalledWith('email/send', expect.objectContaining({ text: expect.stringContaining('AI-interpreted pricing') }))
+
+      billedYearly = true
+      cadence = 'year'
+      amount = 10
+      state.watch.cadence = cadence
+      ctx.params = { id, revision: state.watch.revision }
+      await actions.captureBaseline(ctx)
+      expect(state.watch.candidate?.priceMinor).toBe(12000)
+      ctx.params = { id, revision: state.watch.revision, snapshotId: state.watch.candidate?.snapshotId }
+      await actions.confirmBaseline(ctx)
+      expect(state.watch.baseline?.priceMinor).toBe(12000)
+      amount = 11
+      ctx.params = { id, revision: state.watch.revision }
+      await actions.checkWatch(ctx)
+      expect(state.watch.latest?.impact).toMatchObject({
+        old: { priceMinor: 12000 }, current: { priceMinor: 13200 }, deltaMinor: 12000,
+      })
     } finally { vi.unstubAllGlobals() }
   })
 })
